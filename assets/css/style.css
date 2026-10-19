@@ -533,7 +533,7 @@ dialog { padding: 0; border: 0; color: inherit; }
 }
 .bk-ava--mono img { width: 34%; opacity: .6; }
 
-.bk-days { display: grid; grid-auto-flow: column; grid-auto-columns: 62px; gap: 8px; overflow-x: auto; margin-inline: -20px; padding: 2px 20px 8px; scrollbar-width: none; scroll-snap-type: x proximity; }
+.bk-days { display: grid; grid-auto-flow: column; grid-auto-columns: 62px; gap: 8px; overflow-x: auto; margin-inline: -20px; padding: 2px 20px 8px; scroll-padding-inline: 20px; scrollbar-width: none; scroll-snap-type: x proximity; }
 .bk-days::-webkit-scrollbar { display: none; }
 .bk-day {
   display: grid; justify-items: center; gap: 2px; padding: 10px 0; border: 1.5px solid var(--line); border-radius: var(--r);
@@ -594,3 +594,14 @@ dialog { padding: 0; border: 0; color: inherit; }
 .lightbox__fig img { width: 100%; max-height: calc(100dvh - 120px); object-fit: contain; background: #111; }
 .lightbox__fig figcaption { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; font-size: 14px; }
 .lightbox__close { position: absolute; top: 10px; right: 10px; background: rgba(246, 246, 245, .9); }
+
+/* ---------- данные из админки: абзацы «О салоне», видео в работах ---------- */
+.about__paras { display: grid; gap: 18px; }
+.work { position: relative; }
+.work video { display: block; aspect-ratio: 1; width: 100%; object-fit: cover; pointer-events: none; }
+.work--video::after {
+  content: ''; position: absolute; left: 10px; bottom: 10px; width: 36px; height: 36px; border-radius: 999px;
+  background: rgba(23, 24, 27, .62) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M9 6.5v11l9-5.5z' fill='white'/%3E%3C/svg%3E") 55% 50% / 18px no-repeat;
+}
+.lightbox__fig video { display: block; width: 100%; max-height: calc(100dvh - 120px); background: #111; }
+.lightbox__fig [hidden] { display: none; }

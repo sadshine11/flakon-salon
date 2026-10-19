@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Админка · Флакон</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#E9E9EB">
+<link rel="icon" href="../assets/img/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="../assets/img/apple-touch-icon.png">
+<link rel="preload" href="../assets/fonts/montserrat-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/css/style.css">
+<link rel="stylesheet" href="../assets/css/admin.css">
+</head>
+<body class="adm">
+
+<!-- Вход -->
+<main class="login" data-login hidden>
+  <form class="login__card" novalidate data-login-form>
+    <img class="login__logo" src="../assets/img/logo.webp" alt="Флакон" width="727" height="234">
+    <h1 class="login__title">Вход для салона</h1>
+    <div class="field">
+      <label for="lg-phone">Телефон</label>
+      <input id="lg-phone" name="phone" type="tel" inputmode="tel" autocomplete="username" value="+7 965 999-50-57">
+    </div>
+    <div class="field">
+      <label for="lg-pass">Пароль</label>
+      <input id="lg-pass" name="pass" type="password" autocomplete="current-password" aria-describedby="lg-hint">
+      <p class="login__hint" id="lg-hint">В демо подойдёт любой пароль.</p>
+    </div>
+    <button class="btn btn--dark btn--lg" type="submit">Войти</button>
+    <a class="login__back" href="../">Вернуться на сайт</a>
+  </form>
+</main>
+
+<!-- Рабочее место -->
+<div class="app" data-app hidden>
+  <aside class="side" aria-label="Разделы админки">
+    <a class="side__brand" href="#bookings"><img src="../assets/img/logo.webp" alt="Флакон" width="727" height="234"><span>Админка</span></a>
+    <nav class="side__nav" data-nav></nav>
+    <div class="side__foot">
+      <a class="side__link" href="../" target="_blank" rel="noopener">Открыть сайт</a>
+      <button class="side__link" type="button" data-logout>Выйти</button>
+    </div>
+  </aside>
+
+  <main class="main" id="main" tabindex="-1" data-main></main>
+
+  <nav class="tabbar" aria-label="Разделы админки" data-tabbar></nav>
+</div>
+
+<!-- Окно редактирования: на компьютере справа, на телефоне шторкой снизу -->
+<dialog class="sheet" data-sheet aria-labelledby="sheet-title">
+  <form class="sheet__panel" method="dialog" novalidate data-sheet-form>
+    <header class="sheet__bar">
+      <h2 class="sheet__title" id="sheet-title" tabindex="-1" data-sheet-title></h2>
+      <button class="icon-btn" type="button" data-sheet-close aria-label="Закрыть">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+    </header>
+    <div class="sheet__body" data-sheet-body></div>
+    <footer class="sheet__foot" data-sheet-foot></footer>
+  </form>
+</dialog>
+
+<!-- Подтверждение -->
+<dialog class="confirm" data-confirm aria-labelledby="confirm-text">
+  <form method="dialog" class="confirm__panel">
+    <p class="confirm__text" id="confirm-text" data-confirm-text></p>
+    <div class="confirm__btns">
+      <button class="btn btn--line" value="no" data-confirm-no>Отмена</button>
+      <button class="btn btn--danger" value="yes" data-confirm-yes>Удалить</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" role="status" aria-live="polite" data-toast></div>
+
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/admin.js"></script>
+</body>
+</html>

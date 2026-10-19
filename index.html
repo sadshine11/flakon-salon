@@ -35,7 +35,7 @@
       <a href="#reviews">Отзывы</a>
       <a href="#contacts">Контакты</a>
     </nav>
-    <a class="top__phone" href="tel:+79659995057">+7 965 999-50-57</a>
+    <a class="top__phone" href="tel:+79659995057" data-s-phone>+7 965 999-50-57</a>
     <button class="btn btn--dark top__book" type="button" data-book>Записаться</button>
     <button class="top__burger" type="button" aria-expanded="false" aria-controls="menu" data-burger>
       <span class="sr-only">Меню</span><i></i><i></i>
@@ -48,7 +48,7 @@
     <a href="#works">Работы</a>
     <a href="#reviews">Отзывы</a>
     <a href="#contacts">Контакты</a>
-    <a class="menu__phone" href="tel:+79659995057">+7 965 999-50-57</a>
+    <a class="menu__phone" href="tel:+79659995057" data-s-phone>+7 965 999-50-57</a>
   </nav>
 </header>
 
@@ -65,10 +65,10 @@
           <span class="hero__big">Салон <span class="hero__br"></span>красоты</span>
           <img class="hero__chain hero__chain--front" src="assets/img/chain-front.webp" alt="" width="1800" height="1100">
         </span>
-        <span class="hero__where">на Геодезической, 5/1</span>
+        <span class="hero__where" data-t="heroWhere">на Геодезической, 5/1</span>
       </h1>
 
-      <ul class="hero__prices" aria-label="Цены">
+      <ul class="hero__prices" aria-label="Цены" data-hero-prices>
         <li><span>Маникюр</span><b>1 000</b></li>
         <li><span>Завивка</span><b><small>от</small> 3 500</b></li>
         <li><span>Наращивание ресниц</span><b><small>от</small> 2 000</b></li>
@@ -81,19 +81,19 @@
       </div>
 
       <p class="hero__meta">
-        <span><b>4,9</b> в DIKIDI, 163 оценки</span>
-        <span>Метро «Студенческая», 3 минуты</span>
-        <span>Ежедневно 10:00–20:00</span>
+        <span data-s-rating><b>4,9</b> в DIKIDI, 163 оценки</span>
+        <span data-s-metro>Метро «Студенческая», 3 минуты</span>
+        <span data-s="hours">Ежедневно 10:00–20:00</span>
       </p>
     </div>
   </section>
 
   <!-- Фирменные прайс-листы: те же, что салон публикует в соцсетях -->
-  <section class="sec sec--posters" id="curl" aria-labelledby="posters-title">
+  <section class="sec sec--posters" id="curl" aria-labelledby="posters-title" data-posters-sec>
     <div class="wrap">
       <div class="sec__head">
-        <h2 class="h2" id="posters-title">Маникюр и завивка</h2>
-        <p class="sec__lead">Прайсы на маникюр и на завивку hair curl studio. Нажмите на услугу, чтобы записаться.</p>
+        <h2 class="h2" id="posters-title" data-t="postersTitle">Маникюр и завивка</h2>
+        <p class="sec__lead" data-t="postersLead">Прайсы на маникюр и на завивку hair curl studio. Нажмите на услугу, чтобы записаться.</p>
       </div>
       <div class="posters" data-posters></div>
     </div>
@@ -102,10 +102,12 @@
   <section class="sec sec--about" id="about" aria-labelledby="about-title">
     <div class="wrap about">
       <div class="about__text">
-        <h2 class="h2" id="about-title">Пока мастер работает, мы&nbsp;нальём лимонад</h2>
-        <p>Флакон на Геодезической, 5/1, в трёх минутах от метро «Студенческая». Здесь делают маникюр и педикюр, стрижки, окрашивание и завивку, ресницы, брови, аппаратную косметологию и коррекцию фигуры.</p>
-        <p>Во время процедуры можно выпить кофе, чай, лимонад или прохладный коктейль.</p>
-        <ul class="facts">
+        <h2 class="h2" id="about-title" data-t="aboutTitle">Пока мастер работает, мы&nbsp;нальём лимонад</h2>
+        <div class="about__paras" data-about>
+          <p>Флакон на Геодезической, 5/1, в трёх минутах от метро «Студенческая». Здесь делают маникюр и педикюр, стрижки, окрашивание и завивку, ресницы, брови, аппаратную косметологию и коррекцию фигуры.</p>
+          <p>Во время процедуры можно выпить кофе, чай, лимонад или прохладный коктейль.</p>
+        </div>
+        <ul class="facts" data-facts>
           <li><b>7 мастеров</b><span>можно записаться к своему или к любому свободному</span></li>
           <li><b>Педикюр в массажном кресле</b><span>отдыхаете, пока работает мастер</span></li>
           <li><b>Стерилизация инструментов</b></li>
@@ -143,9 +145,6 @@
       <div class="sec__head sec__head--row">
         <h2 class="h2" id="works-title">Работы</h2>
         <div class="chips" role="group" aria-label="Фильтр работ" data-works-tabs>
-          <button class="chip" type="button" aria-pressed="true" data-filter="all">Все</button>
-          <button class="chip" type="button" aria-pressed="false" data-filter="nails">Ногти</button>
-          <button class="chip" type="button" aria-pressed="false" data-filter="hair">Волосы</button>
         </div>
       </div>
       <ul class="works" data-works></ul>
@@ -157,8 +156,8 @@
       <div class="sec__head sec__head--row">
         <h2 class="h2" id="reviews-title">Отзывы</h2>
         <div class="score">
-          <b class="score__num">4,9</b>
-          <span class="score__txt">163 оценки и 116 отзывов в DIKIDI<br><a href="https://dikidi.net/ru/profile/flakon_na_geodezicheskoj_361731/reviews" target="_blank" rel="noopener">Читать все отзывы</a></span>
+          <b class="score__num" data-s-score>4,9</b>
+          <span class="score__txt"><span data-s-score-txt>163 оценки и 116 отзывов в DIKIDI</span><br><a href="https://dikidi.net/ru/profile/flakon_na_geodezicheskoj_361731/reviews" target="_blank" rel="noopener">Читать все отзывы</a></span>
         </div>
       </div>
       <ul class="reviews" data-reviews></ul>
@@ -169,16 +168,16 @@
     <div class="wrap contacts">
       <div class="contacts__info">
         <h2 class="h2" id="contacts-title">Контакты</h2>
-        <dl class="contacts__list">
+        <dl class="contacts__list" data-contacts>
           <div><dt>Адрес</dt><dd>Новосибирск, ул. Геодезическая, 5/1<br><span class="muted">цокольный этаж</span></dd></div>
           <div><dt>Метро</dt><dd>«Студенческая», 3 минуты пешком</dd></div>
           <div><dt>Часы работы</dt><dd>Ежедневно 10:00–20:00</dd></div>
           <div><dt>Телефон</dt><dd><a class="contacts__phone" href="tel:+79659995057">+7 965 999-50-57</a></dd></div>
         </dl>
         <div class="contacts__msg">
-          <a class="btn btn--line" href="https://wa.me/79659995057" target="_blank" rel="noopener">WhatsApp</a>
-          <a class="btn btn--line" href="https://t.me/+79659995057" target="_blank" rel="noopener">Telegram</a>
-          <a class="btn btn--line" href="https://vk.com/flacon51" target="_blank" rel="noopener">ВКонтакте</a>
+          <a class="btn btn--line" href="https://wa.me/79659995057" target="_blank" rel="noopener" data-s-href="whatsapp">WhatsApp</a>
+          <a class="btn btn--line" href="https://t.me/+79659995057" target="_blank" rel="noopener" data-s-href="telegram">Telegram</a>
+          <a class="btn btn--line" href="https://vk.com/flacon51" target="_blank" rel="noopener" data-s-href="vk">ВКонтакте</a>
         </div>
         <button class="btn btn--dark btn--lg" type="button" data-book>Записаться онлайн</button>
       </div>
@@ -192,14 +191,15 @@
 <footer class="foot">
   <div class="wrap foot__in">
     <img class="foot__logo" src="assets/img/logo.webp" alt="Флакон" width="727" height="234" loading="lazy">
-    <p>Салон красоты на Геодезической, 5/1, Новосибирск<br><a href="tel:+79659995057">+7 965 999-50-57</a> · ежедневно 10:00–20:00</p>
-    <p class="foot__demo">Демо-версия сайта. Услуги, цены и мастера взяты из DIKIDI салона 18.10.2026, цены на завивку и маникюр из новых прайс-листов.</p>
+    <p><span data-s="address">Новосибирск, ул. Геодезическая, 5/1</span><br><a href="tel:+79659995057" data-s-phone>+7 965 999-50-57</a> · <span data-s="hours">Ежедневно 10:00–20:00</span></p>
+    <p class="foot__demo">Демо-версия сайта. Услуги, цены и мастера взяты из DIKIDI салона 18.10.2026, цены на завивку и маникюр из новых прайс-листов. Изменения из админки и записи в демо хранятся только в этом браузере.</p>
+    <p class="foot__demo"><a href="admin/">Админка салона (демо)</a></p>
   </div>
 </footer>
 
 <!-- Кнопка записи внизу экрана на телефоне -->
 <div class="dock" data-dock>
-  <a class="btn btn--line" href="tel:+79659995057">Позвонить</a>
+  <a class="btn btn--line" href="tel:+79659995057" data-s-phone-href>Позвонить</a>
   <button class="btn btn--dark" type="button" data-book>Записаться</button>
 </div>
 
@@ -227,6 +227,7 @@
 <dialog class="lightbox" data-lightbox aria-label="Работа мастера">
   <figure class="lightbox__fig" tabindex="-1" autofocus>
     <img data-lightbox-img alt="">
+    <video data-lightbox-video controls playsinline hidden></video>
     <figcaption>
       <span data-lightbox-cap></span>
       <button class="btn btn--dark" type="button" data-lightbox-book>Хочу так же</button>
@@ -238,6 +239,7 @@
 </dialog>
 
 <script src="assets/js/data.js"></script>
+<script src="assets/js/store.js"></script>
 <script src="assets/js/app.js"></script>
 </body>
 </html>

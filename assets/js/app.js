@@ -1,19 +1,25 @@
-/* Флакон: прайс, мастера, работы и онлайн-запись. Данные в data.js (собираются из DIKIDI). */
-(() => {
+/* Флакон: сайт салона. Данные берутся из FlakonStore (store.js): по умолчанию из DIKIDI,
+   поверх них правки из админки. Свободное время считается по графику мастеров и записям. */
+(async () => {
   'use strict';
 
-  const D = window.FLAKON;
+  const Store = window.FlakonStore;
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const reduce = matchMedia('(prefers-reduced-motion: reduce)');
 
-  const SVC = Object.fromEntries(D.services.map(s => [s.id, s]));
-  const MST = Object.fromEntries(D.masters.map(m => [m.id, m]));
-  const CAT = Object.fromEntries(D.cats.map(c => [c.key, c]));
+  let D = await Store.load();
+  let B = await Store.bookings();
+  let SVC = {}, MST = {};
+  const index = () => {
+    SVC = Object.fromEntries(D.services.map(s => [s.id, s]));
+    MST = Object.fromEntries(D.masters.map(m => [m.id, m]));
+  };
+  index();
 
   /* ---------- форматирование ---------- */
-  const money = n => n.toLocaleString('ru-RU');
+  const money = n => Number(n).toLocaleString('ru-RU');
   const plural = (n, one, few, many) => {
     const a = n % 10, b = n % 100;
     return a === 1 && b !== 11 ? one : a >= 2 && a <= 4 && (b < 12 || b > 14) ? few : many;
@@ -22,24 +28,29 @@
     const h = Math.floor(m / 60), r = m % 60;
     return [h ? h + ' ч' : '', r ? r + ' мин' : ''].filter(Boolean).join(' ');
   };
-  const fmtRate = r => r.toFixed(1).replace('.', ',');
+  const fmtRate = r => Number(r).toFixed(1).replace('.', ',');
   const fmtTime = t => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
   const WD = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
   const WD_FULL = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
   const MON = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
   const fmtDate = d => `${d.getDate()} ${MON[d.getMonth()]}`;
-  const dayKey = d => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
   const cost = (price, from, cur = true) =>
     price === 0 ? 'бесплатно' : `${from ? '<small>от</small>' : ''}${money(price)}${cur ? ' <small>₽</small>' : ''}`;
+  // картинка из папки сайта или загруженная в админке (idb:...)
+  const src = ref => (ref && ref.startsWith('idb:') ? `data-ref="${esc(ref)}"` : `src="${esc(ref)}"`);
+
+  // что видно клиентам: скрытые услуги и мастера, а также услуги без мастеров не показываем
+  const offers = s => s.masters.filter(o => MST[o.id] && !MST[o.id].hidden);
+  const visibleServices = () => D.services.filter(s => !s.hidden && offers(s).length);
+  const offer = (s, mid) => offers(s).find(m => m.id === mid);
 
   /* ---------- шапка, меню, нижняя кнопка ---------- */
   const top = $('[data-top]');
   const burger = $('[data-burger]');
   const menu = $('[data-menu]');
-  const heroLogo = $('.hero__logo');
   const dock = $('[data-dock]');
 
-  new IntersectionObserver(([e]) => top.classList.toggle('is-solid', !e.isIntersecting), { rootMargin: `-${parseInt(getComputedStyle(document.documentElement).getPropertyValue('--top-h')) || 68}px 0px 0px` }).observe(heroLogo);
+  new IntersectionObserver(([e]) => top.classList.toggle('is-solid', !e.isIntersecting), { rootMargin: `-${parseInt(getComputedStyle(document.documentElement).getPropertyValue('--top-h')) || 68}px 0px 0px` }).observe($('.hero__logo'));
   new IntersectionObserver(([e]) => dock.classList.toggle('is-on', !e.isIntersecting && e.boundingClientRect.top < 0)).observe($('.hero__cta'));
 
   const setMenu = open => {
@@ -53,110 +64,171 @@
     if (e.key === 'Escape' && !menu.hidden) { setMenu(false); burger.focus(); }
   });
 
-  /* ---------- фирменные прайсы ---------- */
-  $('[data-posters]').innerHTML = D.posters.map(p => `
-    <article class="poster">
-      <img class="poster__chain" src="assets/img/chain-drape.webp" alt="" width="1200" height="1200" loading="lazy">
-      <div class="poster__head">
-        <h3 class="poster__title">${esc(p.title)}<span class="poster__sub">${esc(p.sub)}</span></h3>
-      </div>
-      <div class="poster__body">
-        <img class="poster__photo" src="assets/img/${p.photo}" alt="${esc(p.photoAlt)}" width="900" height="900" loading="lazy">
-        <ul class="poster__list">
-          ${p.items.map(it => {
-            const s = SVC[it.id];
-            return `<li><button class="poster__item" type="button" data-book-service="${s.id}">
-              <span class="sr-only">Записаться: </span><span class="poster__name">${esc(it.name)}</span>
-              ${it.note ? `<span class="poster__note">${esc(it.note)}</span>` : ''}
-              <span class="poster__price">${money(s.price)}</span>
-            </button></li>`;
-          }).join('')}
-        </ul>
-      </div>
-      <div class="poster__foot">
-        <img class="poster__logo" src="assets/img/logo.webp" alt="Флакон" width="727" height="234" loading="lazy">
-        ${p.handle ? `<a class="poster__handle" href="${D.salon.curlInstagram}" target="_blank" rel="noopener">@${esc(p.handle)}</a>` : ''}
-        <button class="btn btn--dark" type="button" data-book data-book-cat="${p.key}">Записаться</button>
-      </div>
-    </article>`).join('');
+  /* ---------- тексты и контакты ---------- */
+  function renderTexts() {
+    const S = D.salon, T = D.texts;
+    $$('[data-t]').forEach(el => { el.textContent = T[el.dataset.t] ?? ''; });
+    $$('[data-s]').forEach(el => { el.textContent = S[el.dataset.s] ?? ''; });
+    $$('[data-s-href]').forEach(el => { const v = S[el.dataset.sHref]; el.hidden = !v; if (v) el.href = v; });
+    const tel = 'tel:+' + S.phone.replace(/\D/g, '').replace(/^8/, '7');
+    $$('[data-s-phone]').forEach(el => { el.textContent = S.phone; el.href = tel; });
+    $$('[data-s-phone-href]').forEach(el => { el.href = tel; });
+    $$('[data-s-metro]').forEach(el => { el.textContent = `Метро «${S.metro}», ${S.metroWalk.replace(/ пешком$/, '')}`; });
+    $$('[data-s-rating]').forEach(el => { el.innerHTML = `<b>${fmtRate(S.rating)}</b> в DIKIDI, ${S.ratings} ${plural(S.ratings, 'оценка', 'оценки', 'оценок')}`; });
+    $$('[data-s-score]').forEach(el => { el.textContent = fmtRate(S.rating); });
+    $$('[data-s-score-txt]').forEach(el => { el.textContent = `${S.ratings} ${plural(S.ratings, 'оценка', 'оценки', 'оценок')} и ${S.reviews} ${plural(S.reviews, 'отзыв', 'отзыва', 'отзывов')} в DIKIDI`; });
+    $('[data-about]').innerHTML = T.about.filter(Boolean).map(p => `<p>${esc(p)}</p>`).join('');
+    $('[data-facts]').innerHTML = T.facts.filter(f => f.b).map(f => `<li><b>${esc(f.b)}</b>${f.span ? `<span>${esc(f.span)}</span>` : ''}</li>`).join('');
+    $('[data-contacts]').innerHTML = `
+      <div><dt>Адрес</dt><dd>${esc(S.address)}${S.addressNote ? `<br><span class="muted">${esc(S.addressNote)}</span>` : ''}</dd></div>
+      <div><dt>Метро</dt><dd>«${esc(S.metro)}», ${esc(S.metroWalk)}</dd></div>
+      <div><dt>Часы работы</dt><dd>${esc(S.hours)}</dd></div>
+      <div><dt>Телефон</dt><dd><a class="contacts__phone" href="${tel}">${esc(S.phone)}</a></dd></div>`;
+    // цены на первом экране: минимальная из выбранных услуг, «от», если цены разные
+    $('[data-hero-prices]').innerHTML = T.heroPrices.map(h => {
+      const list = h.ids.map(id => SVC[id]).filter(s => s && !s.hidden);
+      if (!list.length) return '';
+      const min = Math.min(...list.map(s => s.price));
+      const from = list.length > 1 && list.some(s => s.price !== min) || list.some(s => s.from);
+      return `<li><span>${esc(h.label)}</span><b>${from ? '<small>от</small> ' : ''}${money(min)}</b></li>`;
+    }).join('');
+  }
+
+  /* ---------- фирменные прайс-листы ---------- */
+  function renderPosters() {
+    $('[data-posters-sec]').hidden = !D.posters.length;
+    $('[data-posters]').innerHTML = D.posters.map(p => {
+      const items = p.items.filter(it => SVC[it.id] && !SVC[it.id].hidden);
+      return `
+      <article class="poster">
+        <img class="poster__chain" src="assets/img/chain-drape.webp" alt="" width="1200" height="1200" loading="lazy">
+        <div class="poster__head">
+          <h3 class="poster__title">${esc(p.title)}<span class="poster__sub">${esc(p.sub)}</span></h3>
+        </div>
+        <div class="poster__body">
+          <img class="poster__photo" ${src(p.photo)} alt="${esc(p.photoAlt)}" width="900" height="900" loading="lazy">
+          <ul class="poster__list">
+            ${items.map(it => {
+              const s = SVC[it.id];
+              return `<li><button class="poster__item" type="button" data-book-service="${s.id}">
+                <span class="sr-only">Записаться: </span><span class="poster__name">${esc(it.name || s.name)}</span>
+                ${it.note ? `<span class="poster__note">${esc(it.note)}</span>` : ''}
+                <span class="poster__price">${money(s.price)}</span>
+              </button></li>`;
+            }).join('')}
+          </ul>
+        </div>
+        <div class="poster__foot">
+          <img class="poster__logo" src="assets/img/logo.webp" alt="Флакон" width="727" height="234" loading="lazy">
+          ${p.handle ? `<a class="poster__handle" href="https://instagram.com/${esc(p.handle)}" target="_blank" rel="noopener">@${esc(p.handle)}</a>` : ''}
+          <button class="btn btn--dark" type="button" data-book data-book-cat="${esc(p.key)}">Записаться</button>
+        </div>
+      </article>`;
+    }).join('');
+  }
 
   /* ---------- интерьер ---------- */
-  const INTERIOR = [
-    ['salon-1.webp', 'Зал: кресла парикмахеров и зеркала с подсветкой'],
-    ['salon-2.webp', 'Кресло для педикюра'],
-    ['salon-7.webp', 'Кабинет коррекции фигуры'],
-    ['salon-4.webp', 'Рабочее место с круглым зеркалом'],
-    ['salon-5.webp', 'Зона ожидания'],
-    ['salon-6.webp', 'Общий вид зала'],
-  ];
-  $('[data-interior]').innerHTML = INTERIOR.map(([f, a]) => `<img src="assets/img/${f}" alt="${a}" loading="lazy" width="900" height="1200">`).join('');
+  function renderInterior() {
+    $('[data-interior]').innerHTML = D.interior.slice(0, 6).map(i => `<img ${src(i.src)} alt="${esc(i.alt)}" loading="lazy" width="900" height="1200">`).join('');
+  }
 
   /* ---------- прайс ---------- */
   const priceTabs = $('[data-price-tabs]');
   const priceList = $('[data-price-list]');
-  priceTabs.innerHTML = D.cats.map((c, i) => `<button class="chip" type="button" aria-pressed="${i === 0}" data-cat="${c.key}">${c.title}</button>`).join('');
-  const renderPrice = key => {
-    priceList.innerHTML = D.services.filter(s => s.cat === key).map(s => `
+  let priceCat = null;
+  function renderPrice() {
+    const vis = visibleServices();
+    const cats = D.cats.filter(c => vis.some(s => s.cat === c.key));
+    if (!cats.some(c => c.key === priceCat)) priceCat = cats[0] && cats[0].key;
+    priceTabs.innerHTML = cats.map(c => `<button class="chip" type="button" aria-pressed="${c.key === priceCat}" data-cat="${c.key}">${esc(c.title)}</button>`).join('');
+    priceList.innerHTML = vis.filter(s => s.cat === priceCat).map(s => `
       <li><button class="price__row" type="button" data-book-service="${s.id}">
         <span class="price__name">${esc(s.name)}${s.note ? `<span class="price__note">${esc(s.note)}</span>` : ''}</span>
         <span class="price__time">${fmtMin(s.min)}</span>
         <span class="price__cost">${cost(s.price, s.from)}</span>
         <span class="btn btn--line price__go">Записаться</span>
       </button></li>`).join('');
-  };
+  }
   priceTabs.addEventListener('click', e => {
     const b = e.target.closest('[data-cat]');
     if (!b) return;
-    $$('[data-cat]', priceTabs).forEach(x => x.setAttribute('aria-pressed', String(x === b)));
-    renderPrice(b.dataset.cat);
+    priceCat = b.dataset.cat;
+    renderPrice();
   });
-  renderPrice(D.cats[0].key);
 
   /* ---------- мастера ---------- */
-  // без фото: знак флакона из логотипа
-  const avatar = (m, cls) => m.noPhoto
-    ? `<span class="${cls} ${cls}--mono" aria-hidden="true"><img src="assets/img/mark.png" alt="" width="120" height="234"></span>`
-    : `<img class="${cls}" src="assets/img/master-${m.slug}.webp" alt="" width="560" height="700" loading="lazy">`;
-  $('[data-masters]').innerHTML = D.masters.map(m => `
-    <article class="master">
-      ${m.noPhoto
-        ? `<div class="master__mono" role="img" aria-label="${esc(m.name)}, фото скоро появится"><img src="assets/img/mark.png" alt="" width="120" height="234" loading="lazy"></div>`
-        : `<img class="master__photo" src="assets/img/master-${m.slug}.webp" alt="${esc(m.name)}" width="560" height="700" loading="lazy">`}
-      <div>
-        <h3 class="master__name">${esc(m.name)}</h3>
-        <p class="master__role">${esc(m.role)}</p>
-        <p class="master__about">${esc(m.about)}</p>
-        <p class="master__rate"><b>${fmtRate(m.rating)}</b> · ${m.reviews} ${plural(m.reviews, 'отзыв', 'отзыва', 'отзывов')}</p>
-      </div>
-      <button class="btn btn--line" type="button" data-book-master="${m.id}">Записаться к ${esc(m.short)}</button>
-    </article>`).join('');
+  const mark = cls => `<img src="assets/img/mark.png" alt="" width="120" height="234">`;
+  const avatar = (m, cls) => m.photo
+    ? `<img class="${cls}" ${src(m.photo)} alt="" width="560" height="700" loading="lazy">`
+    : `<span class="${cls} ${cls}--mono" aria-hidden="true">${mark()}</span>`;
+  function renderMasters() {
+    $('[data-masters]').innerHTML = D.masters.filter(m => !m.hidden).map(m => `
+      <article class="master">
+        ${m.photo
+          ? `<img class="master__photo" ${src(m.photo)} alt="${esc(m.name)}" width="560" height="700" loading="lazy">`
+          : `<div class="master__mono" role="img" aria-label="${esc(m.name)}, фото скоро появится">${mark()}</div>`}
+        <div>
+          <h3 class="master__name">${esc(m.name)}</h3>
+          <p class="master__role">${esc(m.role)}</p>
+          <p class="master__about">${esc(m.about)}</p>
+          ${m.reviews ? `<p class="master__rate"><b>${fmtRate(m.rating)}</b> · ${m.reviews} ${plural(m.reviews, 'отзыв', 'отзыва', 'отзывов')}</p>` : ''}
+        </div>
+        <button class="btn btn--line" type="button" data-book-master="${m.id}">Записаться к ${esc(m.short || m.name)}</button>
+      </article>`).join('');
+  }
 
   /* ---------- работы ---------- */
   const works = $('[data-works]');
-  works.innerHTML = D.works.map((w, i) => `
-    <li data-cat="${w.cat}"><button class="work" type="button" data-work="${i}" aria-label="Открыть фото: ${esc(w.alt)}">
-      <img src="assets/img/${w.img}" alt="${esc(w.alt)}" width="900" height="900" loading="lazy">
-    </button></li>`).join('');
-  $('[data-works-tabs]').addEventListener('click', e => {
+  const worksTabs = $('[data-works-tabs]');
+  let workFilter = 'all';
+  function renderWorks() {
+    const cats = (D.workCats || []).filter(c => D.works.some(w => w.cat === c.key));
+    if (workFilter !== 'all' && !cats.some(c => c.key === workFilter)) workFilter = 'all';
+    worksTabs.innerHTML = cats.length > 1 ? [{ key: 'all', title: 'Все' }, ...cats].map(c => `<button class="chip" type="button" aria-pressed="${c.key === workFilter}" data-filter="${c.key}">${esc(c.title)}</button>`).join('') : '';
+    works.innerHTML = D.works.map(w => `
+      <li data-cat="${esc(w.cat)}" ${workFilter !== 'all' && w.cat !== workFilter ? 'hidden' : ''}>
+        <button class="work${w.type === 'video' ? ' work--video' : ''}" type="button" data-work="${esc(w.id)}" aria-label="${w.type === 'video' ? 'Смотреть видео' : 'Открыть фото'}: ${esc(w.alt)}">
+          ${w.type === 'video'
+            ? `<video ${src(w.src)} muted playsinline preload="metadata" aria-hidden="true"></video>`
+            : `<img ${src(w.src)} alt="${esc(w.alt)}" width="900" height="900" loading="lazy">`}
+        </button>
+      </li>`).join('');
+  }
+  worksTabs.addEventListener('click', e => {
     const b = e.target.closest('[data-filter]');
     if (!b) return;
-    $$('[data-filter]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
-    $$('li', works).forEach(li => { li.hidden = b.dataset.filter !== 'all' && li.dataset.cat !== b.dataset.filter; });
+    workFilter = b.dataset.filter;
+    $$('[data-filter]', worksTabs).forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    $$('li', works).forEach(li => { li.hidden = workFilter !== 'all' && li.dataset.cat !== workFilter; });
   });
 
   /* ---------- отзывы ---------- */
-  $('[data-reviews]').innerHTML = D.reviews.map(r => `
-    <li class="review">
-      <p class="review__text">${esc(r.text)}</p>
-      <p class="review__meta"><b>${esc(r.name)}</b>${esc(r.date)} · ${esc(r.service)} · мастер ${esc(r.master)}</p>
-    </li>`).join('');
+  function renderReviews() {
+    $('[data-reviews]').innerHTML = D.reviews.map(r => `
+      <li class="review">
+        <p class="review__text">${esc(r.text)}</p>
+        <p class="review__meta"><b>${esc(r.name)}</b>${[r.date, r.service, r.master && 'мастер ' + r.master].filter(Boolean).map(esc).join(' · ')}</p>
+      </li>`).join('');
+  }
+
+  async function renderAll() {
+    renderTexts(); renderPosters(); renderInterior(); renderPrice(); renderMasters(); renderWorks(); renderReviews();
+    await Store.hydrate(document.body);
+  }
+  await renderAll();
+
+  // админка в соседней вкладке что-то поменяла: перечитываем и перерисовываем
+  Store.onChange(async () => {
+    D = await Store.load(); B = await Store.bookings(); index();
+    await renderAll();
+  });
 
   /* ---------- окна: открытие и закрытие с анимацией ---------- */
   const lockScroll = on => { document.documentElement.style.overflow = on ? 'hidden' : ''; };
   const openDialog = dlg => { dlg.classList.remove('is-closing'); dlg.showModal(); lockScroll(true); };
   const closeDialog = dlg => {
     if (!dlg.open || dlg.classList.contains('is-closing')) return;
-    const done = () => { dlg.classList.remove('is-closing'); dlg.close(); lockScroll(false); };
+    const done = () => { dlg.classList.remove('is-closing'); dlg.close(); lockScroll(false); dlg.dispatchEvent(new Event('closed')); };
     if (reduce.matches) return done();
     dlg.classList.add('is-closing');
     dlg.addEventListener('animationend', done, { once: true });
@@ -168,27 +240,32 @@
 
   /* ---------- просмотр работы ---------- */
   const lb = $('[data-lightbox]');
+  const lbImg = $('[data-lightbox-img]');
+  const lbVideo = $('[data-lightbox-video]');
   wireDialog(lb);
+  lb.addEventListener('closed', () => lbVideo.pause());
   let lbWork = null;
-  works.addEventListener('click', e => {
+  works.addEventListener('click', async e => {
     const b = e.target.closest('[data-work]');
     if (!b) return;
-    lbWork = D.works[+b.dataset.work];
-    $('[data-lightbox-img]').src = `assets/img/${lbWork.img}`;
-    $('[data-lightbox-img]').alt = lbWork.alt;
+    lbWork = D.works.find(w => w.id === b.dataset.work);
+    const u = await Store.url(lbWork.src);
+    const isVideo = lbWork.type === 'video';
+    lbImg.hidden = isVideo; lbVideo.hidden = !isVideo;
+    if (isVideo) { lbVideo.src = u; lbVideo.setAttribute('aria-label', lbWork.alt); } else { lbImg.src = u; lbImg.alt = lbWork.alt; }
     $('[data-lightbox-cap]').textContent = lbWork.alt;
     openDialog(lb);
   });
   $('[data-lightbox-close]').addEventListener('click', () => closeDialog(lb));
   $('[data-lightbox-book]').addEventListener('click', () => {
-    const cat = lbWork.book || (lbWork.cat === 'nails' ? 'nails' : 'hair');
+    lbVideo.pause();
     lb.close(); lb.classList.remove('is-closing');
-    openBooking({ cat });
+    openBooking({ cat: lbWork.book || 'all' });
   });
 
   /* =====================================================================
-     Онлайн-запись. В демо свободное время считается локально; на рабочем
-     сайте сюда подключается сервер с расписанием и уведомлением в Telegram.
+     Онлайн-запись: услуга → мастер → дата и свободное время → контакты.
+     Свободное время = график мастера минус уже сделанные записи.
      ===================================================================== */
   const dlg = $('[data-book-dialog]');
   const body = $('[data-book-body]');
@@ -203,56 +280,29 @@
   const TITLES = { service: 'Услуга', master: 'Мастер', time: 'Дата и время', form: 'Контакты', done: 'Вы записаны' };
   let st = {};
 
-  // Детерминированное «занятое» время, чтобы демо выглядело как живое расписание
-  const hash = str => { let h = 2166136261; for (const ch of str) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };
-  const rng = seed => () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
-  const busy = (mid, d) => {
-    const r = rng(hash(mid + '|' + dayKey(d)));
-    if (r() < 0.26) return null;                          // выходной мастера
-    const list = [];
-    const n = 2 + Math.floor(r() * 3);
-    for (let i = 0; i < n; i++) {
-      const s = D.salon.open + Math.floor(r() * 18) * 30;
-      list.push([s, s + (2 + Math.floor(r() * 5)) * 30]);
-    }
-    return list;
-  };
-  const freeSlots = (mid, d, dur) => {
-    const b = busy(mid, d);
-    if (!b) return [];
-    const now = new Date();
-    const today = dayKey(now) === dayKey(d);
-    const earliest = today ? Math.ceil((now.getHours() * 60 + now.getMinutes() + 60) / 30) * 30 : 0;
-    const out = [];
-    for (let t = D.salon.open; t + dur <= D.salon.close; t += 30) {
-      if (t < earliest) continue;
-      if (b.some(([a, z]) => t < z && t + dur > a)) continue;
-      out.push(t);
-    }
-    return out;
-  };
   const days = () => {
     const out = [], d0 = new Date();
-    for (let i = 0; i < 14; i++) out.push(new Date(d0.getFullYear(), d0.getMonth(), d0.getDate() + i));
+    for (let i = 0; i < ((D.settings && D.settings.horizonDays) || 21); i++) out.push(Store.addDays(d0, i));
     return out;
   };
-  // Время -> список свободных мастеров (для «любого мастера» берём первого свободного)
+  // время → список свободных мастеров (для «любого мастера» берём первого свободного)
   const slotsFor = d => {
     const s = st.service;
-    const ids = st.master === 'any' ? s.masters.map(m => m.id) : [st.master];
+    const ids = st.master === 'any' ? offers(s).map(m => m.id) : [st.master];
     const map = new Map();
     for (const id of ids) {
-      const dur = s.masters.find(m => m.id === id).min;
-      for (const t of freeSlots(id, d, dur)) map.set(t, [...(map.get(t) || []), id]);
+      const o = offer(s, id);
+      if (!o) continue;
+      for (const t of Store.freeSlots(D, B, id, d, o.min)) map.set(t, [...(map.get(t) || []), id]);
     }
     return [...map.entries()].sort((a, b) => a[0] - b[0]);
   };
-  const offer = (s, mid) => s.masters.find(m => m.id === mid);
 
   function openBooking({ serviceId, masterId, cat } = {}) {
-    st = { step: 'service', service: null, master: null, prefMaster: masterId ? +masterId : null, cat: cat || 'all', q: '', day: null, time: null, assigned: null, form: { name: '', phone: '', comment: '', ok: false } };
+    st = { step: 'service', service: null, master: null, prefMaster: masterId ? +masterId : null, cat: cat || 'all', q: '', day: null, time: null, assigned: null, booking: null, form: { name: '', phone: '', comment: '', ok: false } };
+    if (st.cat !== 'all' && !visibleServices().some(s => s.cat === st.cat)) st.cat = 'all';
     openDialog(dlg);
-    if (serviceId) pickService(+serviceId);
+    if (serviceId && SVC[serviceId] && offers(SVC[serviceId]).length) pickService(+serviceId);
     else render();
   }
 
@@ -260,7 +310,7 @@
 
   function prevStep() {
     if (st.step === 'form') return go('time');
-    if (st.step === 'time') return go('master');
+    if (st.step === 'time') return go(offers(st.service).length > 1 && !st.prefMaster ? 'master' : 'service');
     if (st.step === 'master') return go('service');
   }
   backBtn.addEventListener('click', prevStep);
@@ -268,9 +318,9 @@
   function pickService(id) {
     st.service = SVC[id];
     st.day = null; st.time = null;
-    const pm = st.prefMaster && offer(st.service, st.prefMaster);
-    if (pm) { st.master = st.prefMaster; go('time'); }
-    else if (st.service.masters.length === 1) { st.master = st.service.masters[0].id; go('time'); }
+    const os = offers(st.service);
+    if (st.prefMaster && offer(st.service, st.prefMaster)) { st.master = st.prefMaster; go('time'); }
+    else if (os.length === 1) { st.master = os[0].id; go('time'); }
     else go('master');
   }
 
@@ -298,6 +348,7 @@
     backBtn.hidden = i <= 0;
     renderSummary();
     ({ service: viewService, master: viewMaster, time: viewTime, form: viewForm, done: viewDone })[st.step]();
+    Store.hydrate(body);
     body.scrollTop = 0;
     body.classList.remove('step-in'); void body.offsetWidth; body.classList.add('step-in');
     // содержимое шага заменено: переводим фокус на заголовок, чтобы клавиатура и экранный диктор не потерялись
@@ -306,11 +357,13 @@
 
   /* шаг 1: услуга */
   function viewService() {
+    const vis = visibleServices();
+    const cats = D.cats.filter(c => vis.some(s => s.cat === c.key));
     body.innerHTML = `
       <div class="bk-search">
         <input type="search" placeholder="Найти услугу" aria-label="Найти услугу" value="${esc(st.q)}" data-q>
         <div class="chips" role="group" aria-label="Разделы">
-          ${[{ key: 'all', title: 'Все' }, ...D.cats].map(c => `<button class="chip" type="button" aria-pressed="${st.cat === c.key}" data-bk-cat="${c.key}">${c.title}</button>`).join('')}
+          ${[{ key: 'all', title: 'Все' }, ...cats].map(c => `<button class="chip" type="button" aria-pressed="${st.cat === c.key}" data-bk-cat="${c.key}">${esc(c.title)}</button>`).join('')}
         </div>
       </div>
       <div data-svc-list></div>`;
@@ -321,13 +374,13 @@
   }
   function fillServices() {
     const q = st.q.trim().toLowerCase();
-    const list = D.services.filter(s =>
+    const list = visibleServices().filter(s =>
       (st.cat === 'all' || s.cat === st.cat) &&
       (!q || s.name.toLowerCase().includes(q)) &&
       (!st.prefMaster || offer(s, st.prefMaster)));
     const groups = D.cats.map(c => [c, list.filter(s => s.cat === c.key)]).filter(([, l]) => l.length);
     $('[data-svc-list]', body).innerHTML = groups.length ? groups.map(([c, l]) => `
-      <p class="bk-group">${c.title}</p>
+      <p class="bk-group">${esc(c.title)}</p>
       <div class="bk-list">${l.map(s => {
         const o = st.prefMaster ? offer(s, st.prefMaster) : null;
         return `<button class="bk-item" type="button" data-pick-service="${s.id}">
@@ -342,8 +395,8 @@
   /* шаг 2: мастер */
   function viewMaster() {
     const s = st.service;
-    const ms = s.masters.map(o => ({ o, m: MST[o.id] }));
-    const minPrice = Math.min(...s.masters.map(o => o.price));
+    const ms = offers(s).map(o => ({ o, m: MST[o.id] }));
+    const minPrice = Math.min(...ms.map(x => x.o.price));
     body.innerHTML = `
       <div class="bk-list">
         ${ms.length > 1 ? `<button class="bk-item bk-master" type="button" data-pick-master="any">
@@ -355,7 +408,7 @@
         ${ms.map(({ o, m }) => `<button class="bk-item bk-master" type="button" data-pick-master="${m.id}">
           ${avatar(m, 'bk-ava')}
           <span class="bk-item__name">${esc(m.name)}</span>
-          <span class="bk-item__sub">${esc(m.role)} · ${fmtRate(m.rating)} · ${fmtMin(o.min)}</span>
+          <span class="bk-item__sub">${esc(m.role)}${m.reviews ? ' · ' + fmtRate(m.rating) : ''} · ${fmtMin(o.min)}</span>
           <span class="bk-item__price">${cost(o.price, o.from)}</span>
         </button>`).join('')}
       </div>`;
@@ -364,18 +417,21 @@
   /* шаг 3: дата и время */
   function viewTime() {
     const ds = days().map(d => ({ d, n: slotsFor(d).length }));
-    if (!st.day || !ds.some(x => dayKey(x.d) === dayKey(st.day) && x.n)) st.day = (ds.find(x => x.n) || ds[0]).d;
+    if (!st.day || !ds.some(x => Store.ymd(x.d) === Store.ymd(st.day) && x.n)) st.day = (ds.find(x => x.n) || ds[0]).d;
     const sl = slotsFor(st.day);
     const part = (from, to) => sl.filter(([t]) => t >= from && t < to);
     const block = (name, l) => l.length ? `<p class="bk-group">${name}</p><div class="bk-slots">${l.map(([t]) => `<button class="bk-slot" type="button" data-pick-time="${t}">${fmtTime(t)}</button>`).join('')}</div>` : '';
+    const anyFree = ds.some(x => x.n);
     body.innerHTML = `
       <div class="bk-days" role="group" aria-label="Дата">
-        ${ds.map(({ d, n }) => `<button class="bk-day" type="button" data-pick-day="${dayKey(d)}" aria-pressed="${dayKey(d) === dayKey(st.day)}" ${n ? '' : 'disabled'} aria-label="${WD_FULL[d.getDay()]}, ${fmtDate(d)}${n ? '' : ', нет свободного времени'}">
+        ${ds.map(({ d, n }) => `<button class="bk-day" type="button" data-pick-day="${Store.ymd(d)}" aria-pressed="${Store.ymd(d) === Store.ymd(st.day)}" ${n ? '' : 'disabled'} aria-label="${WD_FULL[d.getDay()]}, ${fmtDate(d)}${n ? '' : ', нет свободного времени'}">
           <small>${WD[d.getDay()]}</small><b>${d.getDate()}</b>
         </button>`).join('')}
       </div>
       <p class="bk-month">${WD_FULL[st.day.getDay()][0].toUpperCase() + WD_FULL[st.day.getDay()].slice(1)}, ${fmtDate(st.day)}</p>
-      ${sl.length ? block('Утро', part(0, 720)) + block('День', part(720, 1020)) + block('Вечер', part(1020, 1440)) : '<p class="bk-empty">На этот день свободного времени нет. Выберите другой день.</p>'}
+      ${sl.length ? block('Утро', part(0, 720)) + block('День', part(720, 1020)) + block('Вечер', part(1020, 1440))
+        : anyFree ? '<p class="bk-empty">На этот день свободного времени нет. Выберите другой день.</p>'
+        : `<div class="bk-empty"><p>В ближайшие дни свободного времени нет.</p><a class="btn btn--line" href="tel:+${D.salon.phone.replace(/\D/g, '')}">Позвонить в салон</a></div>`}
       <p class="bk-note">Показано только свободное время.</p>`;
     const cur = $('.bk-day[aria-pressed="true"]', body);
     if (cur) cur.scrollIntoView({ block: 'nearest', inline: 'nearest' });
@@ -422,7 +478,7 @@
         $(`#bk-${k}-err`, form).textContent = '';
       }
     });
-    form.addEventListener('submit', e => {
+    form.addEventListener('submit', async e => {
       e.preventDefault();
       const errs = {
         name: form.name.value.trim().length < 2 ? 'Напишите, как к вам обращаться' : '',
@@ -438,7 +494,20 @@
       if (bad) { form[bad].focus(); return; }
       const btn = $('[type=submit]', form);
       btn.disabled = true; btn.textContent = 'Записываем…';
-      setTimeout(() => go('done'), 650);
+      // время могли занять, пока клиент заполнял форму: проверяем ещё раз
+      B = await Store.bookings();
+      const still = Store.freeSlots(D, B, st.assigned, st.day, o.min).includes(st.time);
+      if (!still) {
+        btn.disabled = false; btn.textContent = `Записаться на ${fmtDate(st.day)}, ${fmtTime(st.time)}`;
+        $('#bk-ok-err', form).textContent = 'Это время только что заняли. Выберите другое, данные формы сохранятся.';
+        return;
+      }
+      st.booking = await Store.addBooking({
+        serviceId: st.service.id, serviceName: st.service.name, masterId: st.assigned, masterName: MST[st.assigned].name, date: Store.ymd(st.day), start: st.time, dur: o.min,
+        price: o.price, from: o.from, name: form.name.value.trim(), phone: form.phone.value, comment: form.comment.value.trim(), source: 'site',
+      });
+      B = await Store.bookings();
+      go('done');
     });
   }
   function fmtPhone(v) {
@@ -467,9 +536,9 @@
           <div><dt>Мастер</dt><dd>${esc(MST[st.assigned].name)}</dd></div>
           <div><dt>Когда</dt><dd>${WD_FULL[st.day.getDay()]}, ${fmtDate(st.day)}, ${fmtTime(st.time)}</dd></div>
           <div><dt>Стоимость</dt><dd>${o.price === 0 ? 'бесплатно' : (o.from ? 'от ' : '') + money(o.price) + ' ₽'}</dd></div>
-          <div><dt>Адрес</dt><dd>${D.salon.address}, ${D.salon.addressNote}</dd></div>
+          <div><dt>Адрес</dt><dd>${esc(D.salon.address)}${D.salon.addressNote ? ', ' + esc(D.salon.addressNote) : ''}</dd></div>
         </dl>
-        <p class="bk-demo">Это демо-версия: запись никуда не отправилась. На рабочем сайте она сразу придёт салону в Telegram, а это время станет занятым для других клиентов.</p>
+        <p class="bk-demo">Это демо-версия: запись сохранилась только в этом браузере и уже видна в <a href="admin/#bookings">админке салона</a>, а это время стало занятым. На рабочем сайте салон сразу получит её в Telegram.</p>
         <button class="btn btn--line btn--lg" type="button" data-ics>Добавить в календарь</button>
         <button class="btn btn--dark btn--lg" type="button" data-book-close-done>Готово</button>
       </div>`;
@@ -484,7 +553,7 @@
       'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Flakon//Zapis//RU', 'CALSCALE:GREGORIAN', 'BEGIN:VEVENT',
       `UID:${Date.now()}@flakon`, `DTSTAMP:${f(new Date())}`, `DTSTART:${f(start)}`, `DTEND:${f(end)}`,
       `SUMMARY:Флакон: ${st.service.name}`,
-      'LOCATION:Новосибирск\\, ул. Геодезическая\\, 5/1\\, цокольный этаж',
+      `LOCATION:${(D.salon.address + (D.salon.addressNote ? ', ' + D.salon.addressNote : '')).replace(/,/g, '\\,')}`,
       `DESCRIPTION:Мастер: ${MST[st.assigned].name}. Телефон салона: ${D.salon.phone}`,
       'END:VEVENT', 'END:VCALENDAR',
     ].join('\r\n');
@@ -503,7 +572,7 @@
     if (t.dataset.pickService) return pickService(+t.dataset.pickService);
     if (t.dataset.pickMaster) { st.master = t.dataset.pickMaster === 'any' ? 'any' : +t.dataset.pickMaster; st.time = null; return go('time'); }
     if (t.dataset.pickDay) {
-      st.day = days().find(d => dayKey(d) === t.dataset.pickDay);
+      st.day = Store.parseYmd(t.dataset.pickDay);
       viewTime();
       return $('.bk-day[aria-pressed="true"]', body).focus();
     }
