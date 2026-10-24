@@ -11,7 +11,6 @@
   const reduce = matchMedia('(prefers-reduced-motion: reduce)');
 
   let D = await Store.load();
-  let B = await Store.bookings();
   let SVC = {}, MST = {};
   const index = () => {
     SVC = Object.fromEntries(D.services.map(s => [s.id, s]));
@@ -79,7 +78,6 @@
     toastT = setTimeout(() => toastEl.classList.remove('is-on'), 2400);
   };
   const commit = async (msg = 'Сохранено') => { await Store.save(D); index(); toast(msg); };
-  const reloadBookings = async () => { B = await Store.bookings(); };
 
   /* ---------- вход (в демо подходит любой пароль) ---------- */
   const session = {
@@ -193,12 +191,11 @@
 
   /* ---------- разделы и навигация ---------- */
   const SECTIONS = [
-    { key: 'bookings', title: 'Записи', view: viewBookings, tab: true },
+    // записи, график мастеров и уведомления ведутся в DIKIDI, здесь только содержимое сайта
     { key: 'services', title: 'Услуги', view: viewServices, tab: true },
+    { key: 'posters', title: 'Прайс-листы', view: viewPosters, tab: true },
     { key: 'masters', title: 'Мастера', view: viewMasters, tab: true },
-    { key: 'schedule', title: 'График', view: viewSchedule, tab: true },
-    { key: 'works', title: 'Работы', view: viewWorks },
-    { key: 'posters', title: 'Прайс-листы', view: viewPosters },
+    { key: 'works', title: 'Работы', view: viewWorks, tab: true },
     { key: 'site', title: 'Тексты и контакты', view: viewSite },
     { key: 'interior', title: 'Фото салона', view: viewInterior },
     { key: 'reviews', title: 'Отзывы', view: viewReviews },
@@ -206,19 +203,16 @@
   ];
   const main = $('[data-main]');
   let current = null, dirty = false;
-  const newCount = () => B.filter(b => b.status === 'new' && b.date >= Store.ymd(new Date())).length;
 
   function renderNav() {
-    const n = newCount();
-    const badge = key => (key === 'bookings' && n ? `<span class="badge" aria-label="${n} ${plural(n, 'новая', 'новые', 'новых')}">${n}</span>` : '');
-    $('[data-nav]').innerHTML = SECTIONS.map(s => `<a class="nav-link" href="#${s.key}" ${s.key === current ? 'aria-current="page"' : ''}><span>${s.title}</span>${badge(s.key)}</a>`).join('');
+    $('[data-nav]').innerHTML = SECTIONS.map(s => `<a class="nav-link" href="#${s.key}" ${s.key === current ? 'aria-current="page"' : ''}><span>${s.title}</span></a>`).join('');
     const inMore = !SECTIONS.find(s => s.key === current)?.tab;
-    $('[data-tabbar]').innerHTML = SECTIONS.filter(s => s.tab).map(s => `<a class="tab" href="#${s.key}" ${s.key === current ? 'aria-current="page"' : ''}>${s.title}${badge(s.key)}</a>`).join('')
+    $('[data-tabbar]').innerHTML = SECTIONS.filter(s => s.tab).map(s => `<a class="tab" href="#${s.key}" ${s.key === current ? 'aria-current="page"' : ''}>${s.title}</a>`).join('')
       + `<button class="tab" type="button" data-more ${inMore ? 'aria-current="page"' : ''}>Ещё</button>`;
   }
 
   function route(initial = false) {
-    const key = (location.hash.slice(1).split('?')[0]) || 'bookings';
+    const key = (location.hash.slice(1).split('?')[0]) || 'services';
     const sec = SECTIONS.find(s => s.key === key) || SECTIONS[0];
     current = sec.key;
     dirty = false;
@@ -231,7 +225,7 @@
   let lastHash = location.hash;
   addEventListener('hashchange', async () => {
     if (dirty && !(await ask('Есть несохранённые изменения. Уйти со страницы без сохранения?', 'Уйти без сохранения'))) {
-      history.replaceState(null, '', lastHash || '#bookings');
+      history.replaceState(null, '', lastHash || '#services');
       return;
     }
     lastHash = location.hash;
@@ -255,14 +249,10 @@
   });
   sheetBody.addEventListener('click', e => { if (e.target.closest('[data-close-more]')) closeSheet(); });
 
-  // запись с сайта в соседней вкладке: обновляем список и счётчик
+  // правки из админки в соседней вкладке
   Store.onChange(async msg => {
     if (msg.type === 'reset') return location.reload();
     D = await Store.load(); index();
-    await reloadBookings();
-    renderNav();
-    if (current === 'bookings' && !sheet.open) { viewBookings(); Store.hydrate(main, BASE); }
-    if (msg.type === 'bookings') toast('Записи обновились');
   });
 
   // отметка «есть несохранённые изменения» для страниц с общей кнопкой сохранения
@@ -274,168 +264,6 @@
   };
   const savebar = (label = 'Сохранить изменения') =>
     `<div class="savebar" data-savebar hidden><span>Есть несохранённые изменения</span><button class="btn btn--dark btn--sm" type="button" data-save>${label}</button></div>`;
-
-  /* =====================================================================
-     ЗАПИСИ
-     ===================================================================== */
-  let bkDay = new Date(), bkMaster = 'all';
-  const STATUS = { new: 'Новая', confirmed: 'Подтверждена', done: 'Пришла', cancelled: 'Отменена' };
-
-  function viewBookings() {
-    const today = new Date();
-    const horizon = (D.settings && D.settings.horizonDays) || 21;
-    const days = [];
-    for (let i = -3; i < horizon; i++) days.push(Store.addDays(today, i));
-    const forMaster = b => bkMaster === 'all' || b.masterId === bkMaster;
-    const key = Store.ymd(bkDay);
-    const list = B.filter(b => b.date === key && forMaster(b)).sort((a, b) => a.start - b.start || a.masterId - b.masterId);
-    const active = list.filter(b => b.status !== 'cancelled');
-    const sumMoney = active.reduce((s, b) => s + (b.price || 0), 0);
-    const masters = D.masters.filter(m => !m.hidden || B.some(b => b.masterId === m.id));
-
-    main.innerHTML = `<section class="page">
-      <div class="page__head">
-        <h1 class="page__title">Записи</h1>
-        <div class="page__actions"><button class="btn btn--dark" type="button" data-new-booking>Новая запись</button></div>
-      </div>
-      <div class="toolbar">
-        <div class="days" role="group" aria-label="День">
-          ${days.map(d => {
-            const k = Store.ymd(d);
-            const n = B.filter(b => b.date === k && b.status !== 'cancelled' && forMaster(b)).length;
-            return `<button class="day ${k === Store.ymd(today) ? 'day--today' : ''}" type="button" data-day="${k}" aria-pressed="${k === key}" aria-label="${WD_FULL[d.getDay()]}, ${fmtDate(d)}, ${n} ${plural(n, 'запись', 'записи', 'записей')}">
-              <small>${WD[d.getDay()]}</small><b>${d.getDate()}</b><i>${n || '·'}</i></button>`;
-          }).join('')}
-        </div>
-        <div class="chips chips--scroll" role="group" aria-label="Мастер">
-          ${[{ id: 'all', name: 'Все мастера' }, ...masters].map(m => `<button class="chip" type="button" data-bk-master="${m.id}" aria-pressed="${bkMaster === m.id}">${esc(m.id === 'all' ? m.name : m.name.split(' ')[0])}</button>`).join('')}
-        </div>
-      </div>
-      <p class="day-sum"><span><b>${WD_FULL[bkDay.getDay()]}, ${fmtDate(bkDay)}</b></span><span>${active.length} ${plural(active.length, 'запись', 'записи', 'записей')}</span>${active.length ? `<span>по прайсу ${money(sumMoney)} ₽</span>` : ''}</p>
-      ${list.length ? `<div class="bookings">${list.map(bookingCard).join('')}</div>`
-        : `<div class="empty card"><p>На этот день записей нет.</p><button class="btn btn--line" type="button" data-new-booking>Добавить запись</button></div>`}
-      <p class="demo-note">Это демо: записи хранятся только в этом браузере. Записи с сайта появляются здесь сразу, даже если сайт открыт в соседней вкладке. На рабочем сайте о каждой новой записи придёт сообщение в Telegram.</p>
-    </section>`;
-    const cur = $('.day[aria-pressed="true"]', main);
-    if (cur) cur.scrollIntoView({ block: 'nearest', inline: 'center' });
-  }
-
-  function bookingCard(b) {
-    const s = SVC[b.serviceId], m = MST[b.masterId];
-    const tel = phoneDigits(b.phone);
-    const acts = [];
-    if (b.status === 'new') acts.push(`<button class="btn btn--dark btn--sm" type="button" data-bk-act="confirmed" data-id="${b.id}">Подтвердить</button>`);
-    if (b.status === 'confirmed' || b.status === 'new') acts.push(`<button class="btn btn--line btn--sm" type="button" data-bk-act="done" data-id="${b.id}">Пришла</button>`);
-    if (b.status !== 'cancelled') {
-      acts.push(`<button class="btn btn--line btn--sm" type="button" data-bk-edit="${b.id}">Перенести</button>`);
-      acts.push(`<button class="btn btn--ghost btn--sm" type="button" data-bk-act="cancelled" data-id="${b.id}">Отменить</button>`);
-    } else {
-      acts.push(`<button class="btn btn--line btn--sm" type="button" data-bk-act="confirmed" data-id="${b.id}">Вернуть запись</button>`);
-    }
-    return `<article class="bk ${b.status === 'cancelled' ? 'bk--cancelled' : ''}" id="bk-${b.id}" tabindex="-1">
-      <div class="bk__time">${fmtTime(b.start)}<span>до ${fmtTime(b.start + b.dur)}</span></div>
-      <div class="bk__main">
-        <div class="bk__who">${esc(b.name)} <span class="pill-s pill-s--${b.status}">${STATUS[b.status]}</span></div>
-        <div class="bk__svc">${esc(s ? s.name : b.serviceName || 'Услуга удалена')}</div>
-        <div class="bk__meta">${esc(m ? m.name : b.masterName || 'Мастер удалён')} · <a href="tel:+${tel}">${esc(b.phone)}</a> · <a href="https://wa.me/${tel}" target="_blank" rel="noopener">WhatsApp</a> · ${b.source === 'site' ? 'с сайта' : 'добавлена вручную'}</div>
-        ${b.comment ? `<div class="bk__comment">${esc(b.comment)}</div>` : ''}
-      </div>
-      <div class="bk__price">${priceTxt(b.price, b.from)}</div>
-      <div class="bk__acts">${acts.join('')}</div>
-    </article>`;
-  }
-
-  main.addEventListener('click', async e => {
-    if (current !== 'bookings') return;
-    const t = e.target.closest('button');
-    if (!t) return;
-    if (t.dataset.day) { bkDay = Store.parseYmd(t.dataset.day); viewBookings(); return $('.day[aria-pressed="true"]', main).focus(); }
-    if (t.dataset.bkMaster) { bkMaster = t.dataset.bkMaster === 'all' ? 'all' : +t.dataset.bkMaster; viewBookings(); return $('[data-bk-master][aria-pressed="true"]', main).focus(); }
-    if ('newBooking' in t.dataset) return bookingSheet();
-    if (t.dataset.bkEdit) return bookingSheet(B.find(b => b.id === t.dataset.bkEdit));
-    if (t.dataset.bkAct) {
-      const st = t.dataset.bkAct;
-      if (st === 'cancelled' && !(await ask('Отменить запись? Время снова станет свободным для записи с сайта.', 'Отменить запись'))) return;
-      await Store.updateBooking(t.dataset.id, { status: st });
-      await reloadBookings();
-      renderNav(); viewBookings();
-      const card = $(`#bk-${t.dataset.id}`, main);
-      if (card) card.focus({ preventScroll: true });
-      toast({ confirmed: 'Запись подтверждена', done: 'Отмечено: клиент пришёл', cancelled: 'Запись отменена' }[st]);
-    }
-  });
-
-  // новая запись или перенос существующей
-  function bookingSheet(edit = null) {
-    const svcList = D.services.filter(s => s.masters.some(o => MST[o.id]));
-    const groups = D.cats.map(c => [c, svcList.filter(s => s.cat === c.key)]).filter(([, l]) => l.length);
-    const st = {
-      serviceId: edit ? edit.serviceId : (svcList[0] && svcList[0].id),
-      masterId: edit ? edit.masterId : null,
-      date: edit ? edit.date : Store.ymd(bkDay < new Date(new Date().toDateString()) ? new Date() : bkDay),
-      start: edit ? edit.start : null,
-    };
-    const others = () => B.filter(b => !edit || b.id !== edit.id);
-    const body = `
-      ${edit ? `<p class="muted small">Клиент: <b>${esc(edit.name)}</b>, ${esc(edit.phone)}</p>` : ''}
-      ${field('Услуга', `<select id="nb-svc" name="svc" ${edit ? 'disabled' : ''}>${groups.map(([c, l]) => `<optgroup label="${esc(c.title)}">${l.map(s => `<option value="${s.id}" ${s.id === st.serviceId ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</optgroup>`).join('')}</select>`)}
-      ${field('Мастер', `<select id="nb-master" name="master"></select>`)}
-      <div class="grid2">
-        ${field('Дата', `<input id="nb-date" name="date" type="date" value="${st.date}" min="${Store.ymd(new Date())}">`)}
-        ${field('Время', `<select id="nb-time" name="time" aria-describedby="nb-time-hint"></select>`, { err: 'time' })}
-      </div>
-      <p class="field__hint" id="nb-time-hint" data-time-hint></p>
-      ${edit ? '' : `
-        ${field('Имя клиента', `<input id="nb-name" name="name" autocomplete="off">`, { err: 'name' })}
-        ${field('Телефон', `<input id="nb-phone" name="phone" type="tel" inputmode="tel" autocomplete="off" placeholder="+7 (900) 000-00-00">`, { err: 'phone' })}
-        ${field('Комментарий', `<textarea id="nb-comment" name="comment" rows="2"></textarea>`)}`}`;
-    openSheet({
-      title: edit ? 'Перенести запись' : 'Новая запись',
-      body,
-      save: edit ? 'Перенести' : 'Добавить запись',
-      onOpen: root => {
-        const f = sheetForm;
-        const fillMasters = () => {
-          const s = SVC[+f.svc.value];
-          const os = s.masters.filter(o => MST[o.id]);
-          if (!os.some(o => o.id === st.masterId)) st.masterId = os[0] && os[0].id;
-          f.master.innerHTML = os.map(o => `<option value="${o.id}" ${o.id === st.masterId ? 'selected' : ''}>${esc(MST[o.id].name)} · ${fmtMin(o.min)} · ${priceTxt(o.price, o.from)}</option>`).join('');
-        };
-        const fillTimes = () => {
-          const s = SVC[+f.svc.value], mid = +f.master.value;
-          const o = s.masters.find(x => x.id === mid);
-          const slots = f.date.value ? Store.freeSlots(D, others(), mid, Store.parseYmd(f.date.value), o.min) : [];
-          if (edit && f.date.value === edit.date && mid === edit.masterId && !slots.includes(edit.start)) slots.unshift(edit.start);
-          f.time.innerHTML = slots.length ? slots.map(t => `<option value="${t}" ${t === st.start ? 'selected' : ''}>${fmtTime(t)}</option>`).join('') : '<option value="">Нет свободного времени</option>';
-          const m = MST[mid];
-          const day = f.date.value ? m.schedule.week[Store.parseYmd(f.date.value).getDay()] : null;
-          $('[data-time-hint]', root).textContent = !f.date.value ? '' : (m.schedule.off || []).includes(f.date.value) ? 'У мастера в этот день выходной.' : day ? `Мастер работает ${fmtTime(day[0])}–${fmtTime(day[1])}. Показано свободное время.` : 'По графику мастер в этот день не работает.';
-        };
-        fillMasters(); fillTimes();
-        f.svc.addEventListener('change', () => { fillMasters(); fillTimes(); });
-        f.master.addEventListener('change', () => { st.masterId = +f.master.value; fillTimes(); });
-        f.date.addEventListener('change', fillTimes);
-        f.time.addEventListener('change', () => { st.start = +f.time.value; });
-        if (f.phone) f.phone.addEventListener('input', e => { if (!(e.inputType || '').startsWith('delete')) f.phone.value = fmtPhone(f.phone.value); });
-      },
-      onSubmit: async f => {
-        if (!fieldError(f, 'time', f.time.value ? '' : 'Выберите время или другой день')) return false;
-        if (!edit) {
-          if (!fieldError(f, 'name', f.name.value.trim().length >= 2 ? '' : 'Напишите имя клиента')) return false;
-          if (!fieldError(f, 'phone', phoneDigits(f.phone.value).length === 11 ? '' : 'Номер из 11 цифр, например +7 900 000-00-00')) return false;
-        }
-        const s = SVC[+f.svc.value], mid = +f.master.value;
-        const o = s.masters.find(x => x.id === mid);
-        const patch = { masterId: mid, masterName: MST[mid].name, date: f.date.value, start: +f.time.value, dur: o.min, price: o.price, from: o.from };
-        if (edit) await Store.updateBooking(edit.id, patch);
-        else await Store.addBooking({ ...patch, serviceId: s.id, serviceName: s.name, name: f.name.value.trim(), phone: f.phone.value, comment: f.comment.value.trim(), source: 'admin', status: 'confirmed' });
-        await reloadBookings();
-        bkDay = Store.parseYmd(f.date.value);
-        renderNav(); viewBookings(); Store.hydrate(main, BASE);
-        toast(edit ? 'Запись перенесена' : 'Запись добавлена');
-      },
-    });
-  }
 
   /* =====================================================================
      УСЛУГИ
@@ -541,8 +369,7 @@
         </div>
         <label class="check check--row"><input type="checkbox" name="visible" ${base.hidden ? '' : 'checked'}><span>Показывать на сайте и в записи</span></label>`,
       del: isNew ? null : { label: 'Удалить услугу', run: async () => {
-        const fut = B.filter(b => b.serviceId === base.id && b.status !== 'cancelled' && b.date >= Store.ymd(new Date())).length;
-        if (!(await ask(`Удалить «${base.name}»? ${fut ? `На неё ${fut} ${plural(fut, 'будущая запись', 'будущие записи', 'будущих записей')}, они останутся в списке записей. ` : ''}Вместо удаления можно скрыть услугу.`))) return;
+        if (!(await ask(`Удалить «${base.name}» с сайта? В DIKIDI услуга останется. Вместо удаления можно скрыть услугу.`))) return;
         D.services = D.services.filter(x => x.id !== base.id);
         D.posters.forEach(p => { p.items = p.items.filter(it => it.id !== base.id); });
         D.texts.heroPrices.forEach(h => { h.ids = h.ids.filter(id => id !== base.id); });
@@ -632,7 +459,6 @@
   /* =====================================================================
      МАСТЕРА
      ===================================================================== */
-  const workDays = m => [1, 2, 3, 4, 5, 6, 0].filter(d => m.schedule.week[d]).map(d => WD[d]).join(', ') || 'не работает';
   function viewMasters() {
     main.innerHTML = `<section class="page">
       <div class="page__head">
@@ -647,7 +473,7 @@
             <span class="mcard__body">
               <span class="mcard__name">${esc(m.name)}${m.hidden ? ' <span class="pill-s pill-s--hidden">скрыт</span>' : ''}</span>
               <span class="mcard__sub">${esc(m.role)}</span>
-              <span class="mcard__sub">${n} ${plural(n, 'услуга', 'услуги', 'услуг')} · ${workDays(m)}</span>
+              <span class="mcard__sub">${n} ${plural(n, 'услуга', 'услуги', 'услуг')}</span>
             </span>
           </button>`;
         }).join('')}
@@ -699,10 +525,9 @@
           <div class="checks">${svcChecks}</div>
           <p class="field__hint">Цена и время у новых услуг берутся из общих. Поменять их для мастера можно в разделе «Услуги».</p>
         </div>
-        ${isNew ? '' : `<a class="link-btn" href="#schedule" data-goto-schedule="${base.id}">График этого мастера</a>`}`,
+`,
       del: isNew ? null : { label: 'Удалить мастера', run: async () => {
-        const fut = B.filter(b => b.masterId === base.id && b.status !== 'cancelled' && b.date >= Store.ymd(new Date())).length;
-        if (!(await ask(`Удалить мастера ${base.name}? ${fut ? `У него ${fut} ${plural(fut, 'будущая запись', 'будущие записи', 'будущих записей')}, они останутся в списке. ` : ''}Если мастер в отпуске, лучше поставить выходные в графике или скрыть его.`))) return;
+        if (!(await ask(`Удалить мастера ${base.name} с сайта? В DIKIDI мастер останется. Можно не удалять, а скрыть.`))) return;
         D.masters = D.masters.filter(x => x.id !== base.id);
         D.services.forEach(s => { s.masters = s.masters.filter(o => o.id !== base.id); });
         await commit('Мастер удалён');
@@ -725,8 +550,6 @@
           const q = e.target.value.trim().toLowerCase();
           $$('[data-svc-name]', root).forEach(l => { l.hidden = !!q && !l.dataset.svcName.includes(q); });
         });
-        const g = $('[data-goto-schedule]', root);
-        if (g) g.addEventListener('click', () => { schMaster = base.id; });
       },
       onSubmit: async f => {
         const name = f.name.value.trim();
@@ -747,114 +570,6 @@
       },
     });
   }
-
-  /* =====================================================================
-     ГРАФИК
-     ===================================================================== */
-  let schMaster = null;
-  function viewSchedule() {
-    if (!MST[schMaster]) schMaster = D.masters[0] && D.masters[0].id;
-    const m = MST[schMaster];
-    if (!m) { main.innerHTML = '<section class="page"><h1 class="page__title">График</h1><p class="empty">Сначала добавьте мастера.</p></section>'; return; }
-    const week = JSON.parse(JSON.stringify(m.schedule.week));
-    const today = new Date();
-    const offs = (m.schedule.off || []).filter(d => d >= Store.ymd(today)).sort();
-    const cal = [];
-    for (let i = 0; i < 14; i++) {
-      const d = Store.addDays(today, i), k = Store.ymd(d), w = m.schedule.week[d.getDay()];
-      const off = (m.schedule.off || []).includes(k);
-      const n = B.filter(b => b.masterId === m.id && b.date === k && b.status !== 'cancelled').length;
-      cal.push(`<div class="cal__d ${w && !off ? 'cal__d--work' : 'cal__d--off'}"><span>${WD[d.getDay()]}</span><b>${d.getDate()}</b><span>${off ? 'выходной' : w ? `${fmtTime(w[0])}–${fmtTime(w[1])}` : 'не работает'}</span>${n ? `<span>${n} ${plural(n, 'запись', 'записи', 'записей')}</span>` : ''}</div>`);
-    }
-    main.innerHTML = `<section class="page">
-      <div class="page__head"><h1 class="page__title">График</h1></div>
-      <p class="page__lead">По графику сайт показывает клиентам свободное время. Уже занятые часы в запись не попадают.</p>
-      <div class="toolbar">
-        <div class="chips chips--scroll" role="group" aria-label="Мастер">
-          ${D.masters.map(x => `<button class="chip" type="button" data-sch-master="${x.id}" aria-pressed="${x.id === m.id}">${esc(x.name)}</button>`).join('')}
-        </div>
-      </div>
-      <div class="card">
-        <div class="card__head"><h2 class="card__title">Рабочая неделя</h2></div>
-        <div class="card__body">
-          <div class="week">
-            ${[1, 2, 3, 4, 5, 6, 0].map(d => {
-              const w = week[d];
-              return `<div class="week__row">
-                <label class="check check--row"><input type="checkbox" data-wd="${d}" ${w ? 'checked' : ''}><span>${WD_FULL[d]}</span></label>
-                <div class="week__times">
-                  <select class="sel sel--sm" data-wf="${d}" aria-label="${WD_FULL[d]}, начало" ${w ? '' : 'disabled'}>${timeOptions(w ? w[0] : 600)}</select>
-                  <span aria-hidden="true">–</span>
-                  <select class="sel sel--sm" data-wt="${d}" aria-label="${WD_FULL[d]}, конец" ${w ? '' : 'disabled'}>${timeOptions(w ? w[1] : 1200)}</select>
-                </div>
-              </div>`;
-            }).join('')}
-          </div>
-          <p class="field__err" data-week-err></p>
-          ${savebar('Сохранить график')}
-        </div>
-      </div>
-      <div class="card">
-        <div class="card__head"><h2 class="card__title">Выходные и отпуск</h2></div>
-        <div class="card__body">
-          <div class="grid2">
-            ${field('Дата', `<input id="off-date" type="date" min="${Store.ymd(today)}" data-off-date>`)}
-            <div class="field"><span class="field__hint" aria-hidden="true">&nbsp;</span><button class="btn btn--line" type="button" data-off-add>Добавить выходной</button></div>
-          </div>
-          ${offs.length ? `<div class="offs">${offs.map(k => { const d = Store.parseYmd(k); return `<span class="off">${WD[d.getDay()]}, ${fmtDate(d)}<button class="icon-btn" type="button" data-off-del="${k}" aria-label="Убрать выходной ${fmtDate(d)}">${ICON.x}</button></span>`; }).join('')}</div>` : '<p class="muted small">Дополнительных выходных нет.</p>'}
-        </div>
-      </div>
-      <div class="card">
-        <div class="card__head"><h2 class="card__title">Ближайшие две недели</h2></div>
-        <div class="card__body"><div class="cal">${cal.join('')}</div></div>
-      </div>
-    </section>`;
-
-    const readWeek = () => {
-      const w = {};
-      for (const d of [0, 1, 2, 3, 4, 5, 6]) {
-        w[d] = $(`[data-wd="${d}"]`, main).checked ? [+$(`[data-wf="${d}"]`, main).value, +$(`[data-wt="${d}"]`, main).value] : null;
-      }
-      return w;
-    };
-    main.querySelectorAll('[data-wd], [data-wf], [data-wt]').forEach(el => el.addEventListener('change', () => {
-      if (el.dataset.wd) { $(`[data-wf="${el.dataset.wd}"]`, main).disabled = !el.checked; $(`[data-wt="${el.dataset.wd}"]`, main).disabled = !el.checked; }
-      markDirty();
-    }));
-    $('[data-save]', main).addEventListener('click', async () => {
-      const w = readWeek();
-      const bad = Object.entries(w).find(([, v]) => v && v[1] <= v[0]);
-      $('[data-week-err]', main).textContent = bad ? `${WD_FULL[bad[0]]}: конец рабочего дня должен быть позже начала.` : '';
-      if (bad) return $(`[data-wt="${bad[0]}"]`, main).focus();
-      m.schedule.week = w;
-      dirty = false;
-      await commit('График сохранён');
-      viewSchedule();
-    });
-  }
-  main.addEventListener('click', async e => {
-    if (current !== 'schedule') return;
-    const t = e.target.closest('button');
-    if (!t) return;
-    const m = MST[schMaster];
-    if (t.dataset.schMaster) {
-      if (dirty && !(await ask('График не сохранён. Переключиться без сохранения?', 'Переключиться', false))) return;
-      dirty = false; schMaster = +t.dataset.schMaster; viewSchedule();
-      return $('[data-sch-master][aria-pressed="true"]', main).focus();
-    }
-    if ('offAdd' in t.dataset) {
-      const v = $('[data-off-date]', main).value;
-      if (!v) return $('[data-off-date]', main).focus();
-      const busy = B.filter(b => b.masterId === m.id && b.date === v && b.status !== 'cancelled').length;
-      if (busy && !(await ask(`На ${fmtDate(Store.parseYmd(v))} у мастера ${busy} ${plural(busy, 'запись', 'записи', 'записей')}. Записи останутся, их нужно перенести или отменить в разделе «Записи». Поставить выходной?`, 'Поставить выходной', false))) return;
-      m.schedule.off = [...new Set([...(m.schedule.off || []), v])];
-      await commit('Выходной добавлен'); viewSchedule();
-    }
-    if (t.dataset.offDel) {
-      m.schedule.off = (m.schedule.off || []).filter(d => d !== t.dataset.offDel);
-      await commit('Выходной убран'); viewSchedule();
-    }
-  });
 
   /* =====================================================================
      РАБОТЫ (фото и видео)
@@ -1312,61 +1027,39 @@
      НАСТРОЙКИ
      ===================================================================== */
   function viewSettings() {
-    const S = D.settings || (D.settings = { leadMin: 60, horizonDays: 21, telegram: '', notifyNew: true, notifyCancel: true });
-    const opt = (v, list) => list.map(([val, t]) => `<option value="${val}" ${val === v ? 'selected' : ''}>${t}</option>`).join('');
-    main.innerHTML = `<form class="page" novalidate data-settings-form>
+    main.innerHTML = `<section class="page">
       <div class="page__head"><h1 class="page__title">Настройки</h1></div>
       <div class="card">
-        <div class="card__head"><h2 class="card__title">Онлайн-запись</h2></div>
+        <div class="card__head"><h2 class="card__title">Онлайн-запись через DIKIDI</h2></div>
         <div class="card__body">
-          <div class="grid2">
-            ${field('Самая ранняя запись', `<select id="se-lead" name="lead">${opt(S.leadMin, [[0, 'на ближайшее время'], [30, 'через 30 минут'], [60, 'через час'], [120, 'через 2 часа'], [180, 'через 3 часа'], [1440, 'на завтра и позже']])}</select>`, { hint: 'Чтобы мастер успел подготовиться.' })}
-            ${field('Запись вперёд', `<select id="se-hor" name="horizon">${opt(S.horizonDays, [[7, 'на неделю'], [14, 'на 2 недели'], [21, 'на 3 недели'], [30, 'на месяц'], [60, 'на 2 месяца']])}</select>`)}
-          </div>
+          <p>Кнопки «Записаться» на сайте открывают вашу запись в DIKIDI: сразу нужную услугу или мастера. Записи, график мастеров, выходные и напоминания клиентам ведутся в DIKIDI, как раньше.</p>
+          <p class="small muted">Услуги и цены на сайте и в DIKIDI хранятся отдельно. Поменяли цену или добавили услугу в DIKIDI, поменяйте и здесь, в разделе «Услуги».</p>
+          <div class="photo-field__btns"><a class="btn btn--line" href="${esc(D.salon.dikidi)}" target="_blank" rel="noopener">Открыть запись в DIKIDI</a></div>
         </div>
       </div>
-      <div class="card">
-        <div class="card__head"><h2 class="card__title">Уведомления в Telegram</h2></div>
-        <div class="card__body">
-          ${field('Куда присылать', `<input id="se-tg" name="tg" value="${esc(S.telegram)}" placeholder="@flakon_admin или номер чата">`, { hint: 'Можно личный чат администратора или общую группу салона.' })}
-          <label class="check check--row"><input type="checkbox" name="notifyNew" ${S.notifyNew ? 'checked' : ''}><span>Новая запись с сайта</span></label>
-          <label class="check check--row"><input type="checkbox" name="notifyCancel" ${S.notifyCancel ? 'checked' : ''}><span>Отмена или перенос записи</span></label>
-          <p class="demo-note" style="margin:0">В демо сообщения не отправляются. На рабочем сайте подключим бота салона, и он будет присылать каждую запись: услугу, мастера, время, имя и телефон клиента.</p>
-        </div>
-      </div>
-      ${savebar()}
       <div class="card">
         <div class="card__head"><h2 class="card__title">Данные демо</h2></div>
         <div class="card__body">
-          <p class="small muted">Все изменения и записи в демо хранятся только в этом браузере. Их можно выгрузить файлом или вернуть всё как было.</p>
+          <p class="small muted">Все изменения в демо хранятся только в этом браузере. Их можно выгрузить файлом или вернуть всё как было.</p>
           <div class="photo-field__btns">
             <button class="btn btn--line" type="button" data-export>Скачать данные</button>
             <button class="btn btn--line btn--danger-line" type="button" data-reset>Вернуть исходные данные</button>
           </div>
         </div>
       </div>
-    </form>`;
-    const form = $('[data-settings-form]', main);
-    form.addEventListener('input', markDirty);
-    form.addEventListener('change', markDirty);
-    form.addEventListener('submit', e => e.preventDefault());
-    form.addEventListener('click', async e => {
+    </section>`;
+    main.querySelector('.page').addEventListener('click', async e => {
       const t = e.target.closest('button');
       if (!t) return;
-      if ('save' in t.dataset) {
-        Object.assign(S, { leadMin: +form.lead.value, horizonDays: +form.horizon.value, telegram: form.tg.value.trim(), notifyNew: form.notifyNew.checked, notifyCancel: form.notifyCancel.checked });
-        dirty = false;
-        await commit('Настройки сохранены'); viewSettings();
-      }
       if ('export' in t.dataset) {
         const a = document.createElement('a');
-        a.href = URL.createObjectURL(new Blob([JSON.stringify({ data: D, bookings: B }, null, 1)], { type: 'application/json' }));
+        a.href = URL.createObjectURL(new Blob([JSON.stringify({ data: D }, null, 1)], { type: 'application/json' }));
         a.download = `flakon-dannye-${Store.ymd(new Date())}.json`;
         a.click();
         setTimeout(() => URL.revokeObjectURL(a.href), 1000);
       }
       if ('reset' in t.dataset) {
-        if (!(await ask('Вернуть исходные данные? Пропадут все правки, загруженные фото и записи, сделанные в демо.', 'Вернуть исходные'))) return;
+        if (!(await ask('Вернуть исходные данные? Пропадут все правки и загруженные фото, сделанные в демо.', 'Вернуть исходные'))) return;
         await Store.reset();
         location.reload();
       }
