@@ -29,7 +29,7 @@
     <a class="top__logo" href="#main" aria-label="Флакон, наверх"><img src="assets/img/logo.webp" alt="" width="727" height="234"></a>
     <nav class="top__nav" aria-label="Разделы сайта">
       <a href="#price">Прайс</a>
-      <a href="#curl">Hair curl studio</a>
+      <a href="#pl-curl">Hair curl studio</a>
       <a href="#masters">Мастера</a>
       <a href="#works">Работы</a>
       <a href="#reviews">Отзывы</a>
@@ -43,7 +43,7 @@
   </div>
   <nav class="menu" id="menu" aria-label="Меню" data-menu hidden>
     <a href="#price">Прайс</a>
-    <a href="#curl">Hair curl studio</a>
+    <a href="#pl-curl">Hair curl studio</a>
     <a href="#masters">Мастера</a>
     <a href="#works">Работы</a>
     <a href="#reviews">Отзывы</a>
@@ -72,7 +72,7 @@
         <li><span>Маникюр</span><b>1 000</b></li>
         <li><span>Завивка</span><b><small>от</small> 3 500</b></li>
         <li><span>Наращивание ресниц</span><b><small>от</small> 2 000</b></li>
-        <li><span>Ламинирование бровей</span><b>1 800</b></li>
+        <li><span>Ламинирование бровей</span><b>2 000</b></li>
       </ul>
 
       <div class="hero__cta">
@@ -89,11 +89,22 @@
   </section>
 
   <!-- Фирменные прайс-листы: те же, что салон публикует в соцсетях -->
-  <section class="sec sec--posters" id="curl" aria-labelledby="posters-title" data-posters-sec>
+  <section class="sec sec--posters" id="pricelists" aria-labelledby="posters-title" data-posters-sec>
     <div class="wrap">
       <div class="sec__head">
-        <h2 class="h2" id="posters-title" data-t="postersTitle">Маникюр и завивка</h2>
-        <p class="sec__lead" data-t="postersLead">Прайсы на маникюр и на завивку hair curl studio. Нажмите на услугу, чтобы записаться.</p>
+        <h2 class="h2" id="posters-title" data-t="postersTitle">Прайс-лист</h2>
+        <p class="sec__lead" data-t="postersLead">Нажмите на услугу, чтобы записаться.</p>
+      </div>
+      <div class="posters-bar">
+        <div class="chips" role="group" aria-label="Прайс-листы" data-posters-tabs></div>
+        <div class="posters-bar__arrows">
+          <button class="icon-btn" type="button" data-posters-step="-1" aria-label="Предыдущий прайс-лист">
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="icon-btn" type="button" data-posters-step="1" aria-label="Следующий прайс-лист">
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
       </div>
       <div class="posters" data-posters></div>
     </div>
@@ -102,10 +113,11 @@
   <section class="sec sec--about" id="about" aria-labelledby="about-title">
     <div class="wrap about">
       <div class="about__text">
-        <h2 class="h2" id="about-title" data-t="aboutTitle">Пока мастер работает, мы&nbsp;нальём лимонад</h2>
+        <h2 class="h2" id="about-title" data-t="aboutTitle">6 рук&nbsp;– 3 процедуры&nbsp;– около 2 часов</h2>
         <div class="about__paras" data-about>
-          <p>Флакон на Геодезической, 5/1, в трёх минутах от метро «Студенческая». Здесь делают маникюр и педикюр, стрижки, окрашивание и завивку, ресницы, брови, аппаратную косметологию и коррекцию фигуры.</p>
-          <p>Во время процедуры можно выпить кофе, чай, лимонад или прохладный коктейль.</p>
+          <p>Маникюр, педикюр и ресницы или брови одновременно&nbsp;– без нескольких записей и поездок в салон.</p>
+          <p>Просто приходите, расслабляетесь и за один визит приводите себя в порядок.</p>
+          <p>Ваше время слишком ценно, чтобы проводить его в салоне полдня.</p>
         </div>
         <ul class="facts" data-facts>
           <li><b>7 мастеров</b><span>можно записаться к своему или к любому свободному</span></li>

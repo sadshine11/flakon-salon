@@ -253,9 +253,36 @@ h1, h2, h3, p, dl, dd, figure { margin: 0; }
   .sec__head--row .sec__lead, .sec__head--row .chips, .sec__head--row .score { justify-self: start; }
 }
 
-/* ---------- фирменные прайсы ---------- */
-.posters { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(16px, 2.4vw, 32px); }
+/* ---------- фирменные прайсы: лента, на компьютере по два, на телефоне один и край следующего ---------- */
+.posters-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.posters-bar .chips { position: relative; }
+.posters-bar__arrows { display: flex; gap: 6px; flex: none; }
+.posters-bar__arrows .icon-btn { border: 1.5px solid var(--line); }
+.posters-bar__arrows .icon-btn:disabled { opacity: .35; cursor: default; }
+.posters {
+  --gap: clamp(16px, 2.4vw, 32px);
+  position: relative;
+  display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - var(--gap)) / 2); gap: var(--gap);
+  overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scrollbar-width: none;
+}
+.posters::-webkit-scrollbar { display: none; }
+/* на узком компьютере один прайс и край следующего: так фото не превращается в полоску */
+@media (max-width: 1180px) { .posters { grid-auto-columns: min(100%, 680px); } }
+@media (max-width: 900px) {
+  .posters-bar__arrows { display: none; }
+  .posters-bar .chips {
+    flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+    margin-inline: calc(var(--pad) * -1); padding-inline: var(--pad);
+  }
+  .posters-bar .chips::-webkit-scrollbar { display: none; }
+  .posters-bar .chip { flex: none; }
+  .posters {
+    grid-auto-columns: min(86%, 520px); align-items: start;
+    margin-inline: calc(var(--pad) * -1); padding-inline: var(--pad); scroll-padding-inline: var(--pad);
+  }
+}
 .poster {
+  scroll-snap-align: start;
   position: relative; overflow: hidden; isolation: isolate;
   display: grid; grid-template-rows: auto 1fr auto;
   padding: clamp(22px, 3vw, 36px);
@@ -273,15 +300,27 @@ h1, h2, h3, p, dl, dd, figure { margin: 0; }
   text-shadow: 0 1px 0 rgba(160, 162, 168, .55), 0 3px 6px rgba(52, 56, 64, .10), 0 16px 30px rgba(52, 56, 64, .22);
 }
 .poster__sub { display: block; margin-top: 10px; font: 500 clamp(18px, 1.8vw, 24px)/1.2 var(--text); color: var(--ink); text-transform: none; text-shadow: none; letter-spacing: normal; }
-.poster__body { display: grid; grid-template-columns: 48% 1fr; gap: clamp(18px, 2.4vw, 32px); align-items: stretch; margin-top: clamp(22px, 3vw, 36px); }
-.poster__photo { width: 100%; height: 100%; min-height: 320px; object-fit: cover; border-radius: 4px; }
-.poster__list { display: grid; align-content: end; gap: 16px; }
+.poster__body { display: grid; grid-template-columns: 40% 1fr; gap: clamp(18px, 2.4vw, 32px); align-items: stretch; margin-top: clamp(22px, 3vw, 36px); }
+/* в прайсе с вилками цен («12 300–18 900») фото уже, чтобы названиям хватило места */
+.poster--wide .poster__body { grid-template-columns: 32% 1fr; }
+.poster__photo { width: 100%; height: 100%; min-height: 320px; object-fit: cover; object-position: 50% 20%; border-radius: 4px; }
+/* строки как на прайсах салона: название слева, цена справа, между строками тонкая линия */
+.poster__list { display: grid; align-content: end; container-type: inline-size; }
+.poster__list li + li { border-top: 1px solid rgba(23, 24, 27, .14); }
 .poster__item {
-  display: grid; gap: 2px; width: 100%; padding: 0; border: 0; background: none; text-align: left; cursor: pointer;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 14px; row-gap: 2px; align-items: center;
+  width: 100%; padding: 11px 0; border: 0; background: none; text-align: left; cursor: pointer;
 }
-.poster__name { font: 600 17px/1.2 var(--text); }
-.poster__note { font: 400 13px/1.35 var(--text); color: var(--muted); }
-.poster__price { font: 500 32px/1 var(--display); color: var(--gold); font-variant-numeric: tabular-nums; transition: transform .2s var(--ease-out); transform-origin: left; }
+.poster__list li:first-child .poster__item { padding-top: 0; }
+.poster__list li:last-child .poster__item { padding-bottom: 0; }
+.poster__name { grid-column: 1; font: 600 16px/1.25 var(--text); }
+.poster__note { grid-column: 1 / -1; font: 400 13px/1.35 var(--text); color: var(--muted); }
+.poster__price { grid-column: 2; grid-row: 1; font: 500 24px/1 var(--display); color: var(--gold); white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* узкая колонка: цена под названием */
+@container (max-width: 250px) {
+  .poster__item { grid-template-columns: 1fr; }
+  .poster__price { grid-column: 1; grid-row: auto; margin-top: 2px; }
+}
 .poster__price small { font-size: .5em; margin-left: 4px; color: var(--muted); font-weight: 400; }
 @media (hover: hover) and (pointer: fine) {
   .poster__item:hover .poster__name { /* deslop-ignore 09: подчёркивание показывает, что пункт кликабелен */ text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1.5px; }
@@ -290,12 +329,10 @@ h1, h2, h3, p, dl, dd, figure { margin: 0; }
 .poster__logo { width: 120px; }
 .poster__handle { font: 500 14px/1 var(--text); color: var(--muted); text-decoration: none; }
 @media (hover: hover) and (pointer: fine) { .poster__handle:hover { color: var(--ink); } }
-@media (max-width: 900px) {
-  .posters { grid-template-columns: 1fr; }
-}
 @media (max-width: 520px) {
-  .poster__body { grid-template-columns: 1fr; }
-  .poster__photo { aspect-ratio: 4 / 3; height: auto; min-height: 0; }
+  .poster__body, .poster--wide .poster__body { grid-template-columns: 1fr; }
+  .poster__photo { aspect-ratio: 4 / 3; height: auto; min-height: 0; object-position: 50% 12%; }
+  .poster__price { font-size: 22px; }
 }
 
 /* ---------- о салоне ---------- */
@@ -333,7 +370,7 @@ h1, h2, h3, p, dl, dd, figure { margin: 0; }
 .price__name { font: 600 16px/1.35 var(--text); }
 .price__note { display: block; margin-top: 2px; font-size: 13px; font-weight: 400; color: var(--muted); }
 .price__time { font-size: 14px; color: var(--muted); white-space: nowrap; }
-.price__cost { min-width: 104px; text-align: right; font: 500 26px/1 var(--display); color: var(--gold); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.price__cost { min-width: 104px; text-align: right; font: 500 24px/1 var(--display); color: var(--gold); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .price__cost small { font-size: .52em; font-weight: 400; color: var(--muted); margin-right: 4px; letter-spacing: .03em; }
 .price__go { min-height: 40px; padding: 0 16px; font-size: 14px; }
 @media (max-width: 720px) {

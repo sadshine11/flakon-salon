@@ -34,7 +34,8 @@
   const WD_FULL = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
   const MON = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
   const fmtDate = d => `${d.getDate()} ${MON[d.getMonth()]}`;
-  const priceTxt = (p, from) => (p === 0 ? 'бесплатно' : `${from ? 'от ' : ''}${money(p)} ₽`);
+  // to: верх вилки цен («3 800–5 200 ₽»)
+  const priceTxt = (p, from, to = 0) => (p === 0 ? 'бесплатно' : to > p ? `${money(p)}–${money(to)} ₽` : `${from ? 'от ' : ''}${money(p)} ₽`);
   const src = ref => (ref && ref.startsWith('idb:') ? `data-ref="${esc(ref)}"` : `src="${esc(BASE + ref)}"`);
   const durOptions = (sel, max = 600) => {
     let o = '';
@@ -475,7 +476,7 @@
             <span class="row__name">${esc(s.name)}${s.hidden ? ' <span class="pill-s pill-s--hidden">скрыта</span>' : ''}${ms.length ? '' : ' <span class="pill-s pill-s--cancelled">нет мастеров</span>'}</span>
             <span class="row__sub">${fmtMin(s.min)} · ${ms.length ? ms.map(o => esc(MST[o.id].name.split(' ')[0])).join(', ') : 'никто не делает'}</span>
           </button>
-          <span class="row__price">${s.price === 0 ? 'бесплатно' : `${s.from ? '<small>от</small> ' : ''}${money(s.price)}`}</span>
+          <span class="row__price">${s.price === 0 ? 'бесплатно' : s.to > s.price ? `${money(s.price)}–${money(s.to)}` : `${s.from ? '<small>от</small> ' : ''}${money(s.price)}`}</span>
           ${q ? '<span></span>' : `<span class="row__move">
             <button class="icon-btn" type="button" data-move-svc="${s.id}" data-dir="-1" aria-label="Поднять «${esc(s.name)}» выше" ${i === 0 ? 'disabled' : ''}>${ICON.up}</button>
             <button class="icon-btn" type="button" data-move-svc="${s.id}" data-dir="1" aria-label="Опустить «${esc(s.name)}» ниже" ${i === l.length - 1 ? 'disabled' : ''}>${ICON.down}</button>
@@ -528,8 +529,9 @@
         </div>
         <div class="grid2">
           ${field('Цена, ₽', `<input id="sv-price" name="price" type="number" min="0" step="50" value="${base.price}">`, { err: 'price', hint: 'Если поставить 0, на сайте будет «бесплатно».' })}
-          <div class="field"><span class="field__hint" aria-hidden="true">&nbsp;</span><label class="check check--row"><input type="checkbox" name="from" ${base.from ? 'checked' : ''}><span>Показывать «от» перед ценой</span></label></div>
+          ${field('Цена до, ₽', `<input id="sv-to" name="to" type="number" min="0" step="50" value="${base.to || ''}" placeholder="необязательно">`, { hint: 'Для цены вилкой, например 3 800–5 200. В записи покажется «от 3 800».' })}
         </div>
+        <label class="check check--row"><input type="checkbox" name="from" ${base.from ? 'checked' : ''}><span>Показывать «от» перед ценой</span></label>
         ${field('Описание', `<textarea id="sv-note" name="note" rows="2" placeholder="Например: снятие, маникюр, покрытие">${esc(base.note)}</textarea>`, { hint: 'Показывается под названием в прайсе.' })}
         <div class="field">
           <span>Кто делает</span>
@@ -565,15 +567,19 @@
         const name = f.name.value.trim();
         if (!fieldError(f, 'name', name ? '' : 'Напишите название услуги')) return false;
         const price = Math.max(0, Math.round(+f.price.value || 0));
+        const hi = Math.round(+f.to.value || 0);
+        const to = hi > price ? hi : 0;
+        // при вилке цен в записи пишем «от»
+        const from = f.from.checked || to > 0;
         const masters = D.masters.filter(m => f[`m-${m.id}`].checked).map(m => ({
-          id: m.id, price: Math.max(0, Math.round(+f[`mp-${m.id}`].value || 0)), min: +f[`mm-${m.id}`].value, from: f.from.checked,
+          id: m.id, price: Math.max(0, Math.round(+f[`mp-${m.id}`].value || 0)), min: +f[`mm-${m.id}`].value, from,
         }));
         const visible = f.visible.checked;
         if (visible && !masters.length && !fieldError(f, 'masters', 'Отметьте хотя бы одного мастера, иначе на услугу нельзя записаться')) {
           $('[name^="m-"]', sheetBody).focus();
           return false;
         }
-        const next = { ...base, name, cat: f.cat.value, min: +f.min.value, price, from: f.from.checked, note: f.note.value.trim(), masters, hidden: !visible };
+        const next = { ...base, name, cat: f.cat.value, min: +f.min.value, price, to, from, note: f.note.value.trim(), masters, hidden: !visible };
         if (isNew) D.services.push(next);
         else D.services[D.services.indexOf(base)] = next;
         await commit(isNew ? 'Услуга добавлена' : 'Услуга сохранена');

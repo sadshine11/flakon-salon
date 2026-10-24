@@ -34,8 +34,11 @@
   const WD_FULL = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
   const MON = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
   const fmtDate = d => `${d.getDate()} ${MON[d.getMonth()]}`;
-  const cost = (price, from, cur = true) =>
-    price === 0 ? 'бесплатно' : `${from ? '<small>от</small>' : ''}${money(price)}${cur ? ' <small>₽</small>' : ''}`;
+  // to: верх вилки цен («3 800–5 200»), тогда «от» не пишем
+  const cost = (price, from, cur = true, to = 0) =>
+    price === 0 ? 'бесплатно'
+      : to > price ? `${money(price)}–${money(to)}${cur ? ' <small>₽</small>' : ''}`
+      : `${from ? '<small>от</small>' : ''}${money(price)}${cur ? ' <small>₽</small>' : ''}`;
   // картинка из папки сайта или загруженная в админке (idb:...)
   const src = ref => (ref && ref.startsWith('idb:') ? `data-ref="${esc(ref)}"` : `src="${esc(ref)}"`);
 
@@ -94,26 +97,30 @@
     }).join('');
   }
 
-  /* ---------- фирменные прайс-листы ---------- */
+  /* ---------- фирменные прайс-листы: лента, листается вбок ---------- */
+  const posters = $('[data-posters]');
+  const postersTabs = $('[data-posters-tabs]');
+  const posterLabel = p => { const t = p.sub || p.title; return t.charAt(0).toUpperCase() + t.slice(1); };
   function renderPosters() {
     $('[data-posters-sec]').hidden = !D.posters.length;
-    $('[data-posters]').innerHTML = D.posters.map(p => {
+    posters.innerHTML = D.posters.map((p, i) => {
       const items = p.items.filter(it => SVC[it.id] && !SVC[it.id].hidden);
+      const wide = items.some(it => SVC[it.id].to > SVC[it.id].price);
       return `
-      <article class="poster">
+      <article class="poster${wide ? ' poster--wide' : ''}" ${p.slug ? `id="pl-${esc(p.slug)}"` : ''} data-poster="${i}">
         <img class="poster__chain" src="assets/img/chain-drape.webp" alt="" width="1200" height="1200" loading="lazy">
         <div class="poster__head">
           <h3 class="poster__title">${esc(p.title)}<span class="poster__sub">${esc(p.sub)}</span></h3>
         </div>
         <div class="poster__body">
-          <img class="poster__photo" ${src(p.photo)} alt="${esc(p.photoAlt)}" width="900" height="900" loading="lazy">
+          <img class="poster__photo" ${src(p.photo)} alt="${esc(p.photoAlt)}" width="480" height="945" loading="lazy">
           <ul class="poster__list">
             ${items.map(it => {
               const s = SVC[it.id];
               return `<li><button class="poster__item" type="button" data-book-service="${s.id}">
                 <span class="sr-only">Записаться: </span><span class="poster__name">${esc(it.name || s.name)}</span>
                 ${it.note ? `<span class="poster__note">${esc(it.note)}</span>` : ''}
-                <span class="poster__price">${money(s.price)}</span>
+                <span class="poster__price">${cost(s.price, false, false, s.to)}</span>
               </button></li>`;
             }).join('')}
           </ul>
@@ -125,7 +132,54 @@
         </div>
       </article>`;
     }).join('');
+    postersTabs.innerHTML = D.posters.length > 1
+      ? D.posters.map((p, i) => `<button class="chip" type="button" aria-pressed="false" data-poster-go="${i}">${esc(posterLabel(p))}</button>`).join('')
+      : '';
+    syncPosters();
   }
+  // какой прайс сейчас первым в ленте: подсвечиваем его кнопку, крайние стрелки гасим
+  const posterStart = () => parseFloat(getComputedStyle(posters).scrollPaddingLeft) || 0;
+  const posterNow = () => {
+    const els = $$('.poster', posters), x = posters.scrollLeft + posterStart();
+    return els.reduce((best, el, i) => (Math.abs(el.offsetLeft - x) < Math.abs(els[best].offsetLeft - x) ? i : best), 0);
+  };
+  let posterWant = -1; // последний прайс, выбранный кнопкой: в конце ленты он может быть не первым
+  function syncPosters() {
+    if (!D.posters.length) return;
+    const end = posters.scrollLeft >= posters.scrollWidth - posters.clientWidth - 2;
+    let cur = posterNow();
+    if (end && posterWant > cur) cur = posterWant;
+    $$('[data-poster-go]', postersTabs).forEach((b, i) => {
+      const on = i === cur;
+      b.setAttribute('aria-pressed', on);
+      // на телефоне кнопки в одну строку: активную держим в видимой части
+      if (on && (b.offsetLeft < postersTabs.scrollLeft || b.offsetLeft + b.offsetWidth > postersTabs.scrollLeft + postersTabs.clientWidth)) {
+        postersTabs.scrollTo({ left: b.offsetLeft - 16, behavior: reduce.matches ? 'auto' : 'smooth' });
+      }
+    });
+    $('[data-posters-step="-1"]').disabled = posters.scrollLeft < 2;
+    $('[data-posters-step="1"]').disabled = end;
+  }
+  const posterGo = i => {
+    const els = $$('.poster', posters);
+    const el = els[Math.max(0, Math.min(els.length - 1, i))];
+    if (el) posters.scrollTo({ left: el.offsetLeft - posterStart(), behavior: reduce.matches ? 'auto' : 'smooth' });
+  };
+  let posterRaf = 0;
+  posters.addEventListener('scroll', () => {
+    cancelAnimationFrame(posterRaf);
+    posterRaf = requestAnimationFrame(syncPosters);
+  }, { passive: true });
+  addEventListener('resize', syncPosters);
+  ['pointerdown', 'wheel'].forEach(t => posters.addEventListener(t, () => { posterWant = -1; }, { passive: true }));
+  postersTabs.addEventListener('click', e => {
+    const b = e.target.closest('[data-poster-go]');
+    if (!b) return;
+    posterWant = +b.dataset.posterGo;
+    posterGo(posterWant);
+    syncPosters();
+  });
+  $$('[data-posters-step]').forEach(b => b.addEventListener('click', () => { posterWant = -1; posterGo(posterNow() + +b.dataset.postersStep); }));
 
   /* ---------- интерьер ---------- */
   function renderInterior() {
@@ -145,7 +199,7 @@
       <li><button class="price__row" type="button" data-book-service="${s.id}">
         <span class="price__name">${esc(s.name)}${s.note ? `<span class="price__note">${esc(s.note)}</span>` : ''}</span>
         <span class="price__time">${fmtMin(s.min)}</span>
-        <span class="price__cost">${cost(s.price, s.from)}</span>
+        <span class="price__cost">${cost(s.price, s.from, true, s.to)}</span>
         <span class="btn btn--line price__go">Записаться</span>
       </button></li>`).join('');
   }
